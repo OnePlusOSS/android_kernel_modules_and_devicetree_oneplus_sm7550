@@ -5899,7 +5899,7 @@ int dp_peer_get_rxtid_stats_ipa(struct dp_peer *peer,
 			continue;
 
 		rx_tid = &peer->rx_tid[i];
-		if (rx_tid->hw_qdesc_vaddr_unaligned) {
+		if (rx_tid && rx_tid->hw_qdesc_vaddr_unaligned) {
 			params.std.need_status = 1;
 			params.std.addr_lo =
 				rx_tid->hw_qdesc_paddr & 0xffffffff;
@@ -5963,7 +5963,7 @@ int dp_peer_rxtid_stats(struct dp_peer *peer,
 			continue;
 
 		rx_tid = &peer->rx_tid[i];
-		if (rx_tid->hw_qdesc_vaddr_unaligned) {
+		if (rx_tid && rx_tid->hw_qdesc_vaddr_unaligned) {
 			params.std.need_status = 1;
 			params.std.addr_lo =
 				rx_tid->hw_qdesc_paddr & 0xffffffff;

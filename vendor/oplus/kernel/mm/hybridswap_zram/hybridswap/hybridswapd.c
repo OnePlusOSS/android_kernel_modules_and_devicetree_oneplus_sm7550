@@ -1354,21 +1354,33 @@ static bool is_cpu_busy(void)
 }
 #endif
 
+static bool hybridswapd_need_pasue(void)
+{
+	if (atomic_read(&swapd_pause)) {
+		count_swapd_event(SWAPD_MANUAL_PAUSE);
+		return true;
+	}
+
+	if (atomic_read(&display_off))
+		return true;
+
+#ifdef CONFIG_OPLUS_JANK
+	if (is_cpu_busy()) {
+		count_swapd_event(SWAPD_CPU_BUSY_BREAK_TIMES);
+		return true;
+	}
+#endif
+	return false;
+}
+
 static void wakeup_swapd(pg_data_t *pgdat)
 {
 	unsigned long curr_interval;
 	struct hybridswapd_task* hyb_task = PGDAT_ITEM_DATA(pgdat);
 
-	if (!hyb_task || !hyb_task->swapd)
+	if (!hyb_task || !hyb_task->swapd || hybridswapd_need_pasue())
 		return;
 
-	if (atomic_read(&swapd_pause)) {
-		count_swapd_event(SWAPD_MANUAL_PAUSE);
-		return;
-	}
-
-	if (atomic_read(&display_off))
-		return;
 
 	if (!waitqueue_active(&hyb_task->swapd_wait))
 		return;
@@ -1515,7 +1527,7 @@ static unsigned long swapd_shrink_anon(pg_data_t *pgdat,
 			log_info("memcg %s reclaim %lu want %lu\n", hybs->name,
 					memcg_nr_reclaimed, memcg_to_reclaim);
 			nr_reclaimed += memcg_nr_reclaimed;
-			if (nr_reclaimed >= nr_to_reclaim) {
+			if (nr_reclaimed >= nr_to_reclaim || hybridswapd_need_pasue()) {
 				get_next_memcg_break(memcg);
 				exit = true;
 				break;

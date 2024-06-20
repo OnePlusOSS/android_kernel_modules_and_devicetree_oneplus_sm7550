@@ -408,7 +408,7 @@ static void ak09970_inttobuff(u8* th, int low, int high)
 }
 
 
-static bool ak09970_update_threshold(int position, short lowthd, short highthd, struct dhall_data_xyz *halldata, int interf)
+static bool ak09970_update_threshold(int position, short lowthd, short highthd, struct dhall_data_xyz *halldata, int flag)
 {
 	u8 th[4] = {0};
 	u8 sth[4] = {0};
@@ -447,7 +447,7 @@ static bool ak09970_update_threshold(int position, short lowthd, short highthd, 
 	}  */
 	switch (position) {
 	case UP_STATE:
-		if (g_chip->is_turn_upside_down) {
+		if (flag) {
 			lowthd = halldata->hall_x + YBOP_TOL;
 			highthd = lowthd + 1;
 		} else {
@@ -456,7 +456,7 @@ static bool ak09970_update_threshold(int position, short lowthd, short highthd, 
 		}
 		break;
 	case DOWN_STATE:
-		if (g_chip->is_turn_upside_down) {
+		if (flag) {
 			lowthd = halldata->hall_x - YBRP_TOL;
 			highthd = lowthd + 1;
 		} else {
@@ -474,7 +474,7 @@ static bool ak09970_update_threshold(int position, short lowthd, short highthd, 
 	TRI_KEY_LOG("lowthd = %d, highthd=%d.\n", lowthd, highthd);
 	switch (position) {
 	case UP_STATE:
-		if (g_chip->is_turn_upside_down) {
+		if (flag) {
 			data[0] = 0x02;
 		} else {
 			data[0] = 0x03;
@@ -511,7 +511,7 @@ static bool ak09970_update_threshold(int position, short lowthd, short highthd, 
 		TRI_KEY_LOG("%s UP_STATE AK09970_REG_CNTL1 0x20 data is 0x%02X%02X \n", __func__, data[0], data[1]);
 		break;
 	case DOWN_STATE:
-		if (g_chip->is_turn_upside_down) {
+		if (flag) {
 			data[0] = 0x03;
 		} else {
 			data[0] = 0x02;

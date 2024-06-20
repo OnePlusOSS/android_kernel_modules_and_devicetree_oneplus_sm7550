@@ -219,7 +219,7 @@
 			};
 
 			quiet_modem_trip0: modem-trip0 {
-				temperature = <42000>;
+				temperature = <52000>;
 				hysteresis = <2000>;
 				type = "passive";
 			};
@@ -273,7 +273,7 @@
 			};
 
 			quiet_modem_trip1: modem-trip1 {
-				temperature = <60000>;
+				temperature = <70000>;
 				hysteresis = <4000>;
 				type = "passive";
 			};
@@ -317,19 +317,19 @@
 	pa-therm0 {
 		trips {
 			pa_therm0_trip0: pa-therm0-trip0 {
-				temperature = <52000>;
+				temperature = <72000>;
 				hysteresis = <2000>;
 				type = "passive";
 			};
 
 			pa_therm0_trip1: pa-therm0-trip1 {
-				temperature = <54000>;
+				temperature = <74000>;
 				hysteresis = <2000>;
 				type = "passive";
 			};
 
 			pa_therm0_trip2: pa-therm0-trip2 {
-				temperature = <60000>;
+				temperature = <85000>;
 				hysteresis = <4000>;
 				type = "passive";
 			};

@@ -536,6 +536,20 @@ static int oplus_ufcs_delay_exit(void)
 	return 0;
 }
 
+static int oplus_ufcs_boot_delay(void)
+{
+	struct oplus_ufcs_chip *chip = g_ufcs_chip;
+
+	if (!chip || !chip->ufcs_support_type || !chip->ufcs_boot_delay_ms || oplus_chg_get_boot_completed() ||
+	    oplus_is_power_off_charging(NULL))
+		return 0;
+
+	ufcs_err("ufcs boot delay ms:%d\n", chip->ufcs_boot_delay_ms);
+	msleep(chip->ufcs_boot_delay_ms);
+	chip->ufcs_boot_delay_ms = 0;
+	return 0;
+}
+
 static int oplus_ufcs_parse_charge_strategy(struct oplus_ufcs_chip *chip)
 {
 	int rc;
@@ -561,6 +575,10 @@ static int oplus_ufcs_parse_charge_strategy(struct oplus_ufcs_chip *chip)
 	rc = of_property_read_u32(node, "oplus,ufcs_exit_pth", &chip->ufcs_exit_pth);
 	if (rc)
 		chip->ufcs_exit_pth = 1000;
+
+	rc = of_property_read_u32(node, "oplus,ufcs_boot_delay_ms", &chip->ufcs_boot_delay_ms);
+	if (rc)
+		chip->ufcs_boot_delay_ms = 0;
 
 	chip->ufcs_bcc_support = of_property_read_bool(node, "oplus,ufcs_bcc_support");
 
@@ -1240,7 +1258,10 @@ static int oplus_ufcs_get_charging_data(struct oplus_ufcs_chip *chip)
 	chip->data.ap_batt_temperature = oplus_chg_match_temp_for_chging();
 	chip->data.ap_fg_temperature = oplus_gauge_get_batt_temperature();
 
-	chip->data.ap_batt_volt = oplus_gauge_get_batt_mvolts();
+	if (chip->ops->ufcs_get_cp_master_vbat)
+		chip->data.ap_batt_volt = chip->ops->ufcs_get_cp_master_vbat();
+	if (chip->data.ap_batt_volt <= 0 || (chip->ops->ufcs_get_cp_master_vbat == NULL))
+		chip->data.ap_batt_volt = oplus_gauge_get_batt_mvolts();
 	chip->data.ap_batt_current = oplus_gauge_get_batt_current();
 	chip->data.current_adapter_max = chip->ops->ufcs_get_scap_imax(oplus_ufcs_get_curve_vbus(chip));
 	oplus_ufcs_get_ufcs_status(chip);
@@ -3018,10 +3039,22 @@ static int oplus_ufcs_action_status_start(struct oplus_ufcs_chip *chip)
 static int oplus_ufcs_action_open_mos(struct oplus_ufcs_chip *chip)
 {
 	int ret = 0;
+	int cnt = 0;
+	int cp_ibus = 0;
+
 	if (!chip)
 		return -ENODEV;
 
 	ret = oplus_ufcs_charging_enable_master(chip, true);
+	/* wait ibus raised after enable MOS */
+	for (cnt = 0; cnt < UFCS_ENALBE_CHECK_CNTS; cnt++) {
+		msleep(50);
+		cp_ibus = chip->ops->ufcs_get_cp_master_ibus();
+		if (cp_ibus < UFCS_DISCONNECT_IOUT_MIN)
+			ufcs_err("ibus not raised, ibus[%d], cnt[%d]\n", cp_ibus, cnt);
+		else
+			break;
+	}
 
 	chip->ufcs_status = OPLUS_UFCS_STATUS_VOLT_CHANGE;
 	chip->timer.batt_curve_time = 0;
@@ -3222,7 +3255,11 @@ static int oplus_ufcs_set_pdo(struct oplus_ufcs_chip *chip)
 
 static void oplus_ufcs_voter_charging_stop(struct oplus_ufcs_chip *chip)
 {
-	int stop_voter = chip->ufcs_stop_status;
+	int stop_voter = 0;
+	if (oplus_chg_get_flash_led_status())
+		chip->ufcs_stop_status = UFCS_STOP_VOTER_FLASH_LED;
+
+	stop_voter = chip->ufcs_stop_status;
 
 	switch (stop_voter) {
 	case UFCS_STOP_VOTER_USB_TEMP:
@@ -4036,7 +4073,7 @@ bool oplus_ufcs_get_src_cap(void)
 	for (i = 0; i < src_cap->cap_num; i++) {
 		ufcs_debug("i = %d, [%d, %d, %d, %d]\n", i, src_cap->max_volt[i], src_cap->min_volt[i],
 			   src_cap->max_curr[i], src_cap->min_curr[i]);
-		if ((src_cap->max_volt[i] != src_cap->min_volt[i]) && (src_cap->max_volt[i] >= UFCS_VOL_CURVE_HMIN)) {
+		if ((src_cap->max_volt[i] != src_cap->min_volt[i]) && (src_cap->max_volt[i] > UFCS_VOL_CURVE_HMIN)) {
 			chip->ufcs_imax = src_cap->max_curr[i];
 			chip->ufcs_vmax = src_cap->max_volt[i];
 			vbus_ok = true;
@@ -4146,6 +4183,8 @@ bool oplus_ufcs_switch_ufcs_check(void)
 	int reset_status = UFCS_RESET_FAIL;
 	if (!chip)
 		return false;
+
+	oplus_ufcs_boot_delay();
 
 	if (oplus_ufcs_start_prepare() == false)
 		goto fail;

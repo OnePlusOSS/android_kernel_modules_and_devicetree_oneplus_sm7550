@@ -28,7 +28,10 @@ unsigned int g_async_ux_enable = 1;
 unsigned int g_set_last_async_ux = 1;
 unsigned int g_set_async_ux_after_pending = 1;
 static unsigned int async_insert_queue = 1;
+static unsigned int sync_insert_queue = 1;
 static unsigned int async_ux_test = 0;
+
+static int insert_limit[NUM_INSERT_MAX] = {0};
 
 #define trace_binder_debug(x...) \
 	do { \
@@ -768,6 +771,13 @@ static void android_vh_binder_transaction_received_handler(void *unused,
 	if (unlikely(!g_sched_enable) || unlikely(!g_async_ux_enable)) {
 		return;
 	}
+	if(!strncmp(proc->tsk->comm, SYSTEM_SERVER_NAME, TASK_COMM_LEN)) {
+		if(t->debug_id == insert_limit[NUM_INSERT_ID1]) {
+			insert_limit[NUM_INSERT_ID1] = 0;
+		} else if (t->debug_id == insert_limit[NUM_INSERT_ID2]) {
+			insert_limit[NUM_INSERT_ID2] = 0;
+		}
+	}
 	if (binder_is_sync_mode(t->flags)) {
 		return;
 	}
@@ -811,7 +821,7 @@ static void android_vh_free_oplus_binder_struct_handler(void *unused, struct bin
 }
 
 static bool binder_dynamic_enqueue_work_ilocked(struct binder_work *work,
-		struct list_head *target_list)
+		struct list_head *target_list, bool sync_insert)
 {
 	struct binder_work *w = NULL;
 	struct binder_transaction *t = NULL;
@@ -824,6 +834,11 @@ static bool binder_dynamic_enqueue_work_ilocked(struct binder_work *work,
 	}
 
 	trace_binder_ux_work(work, target_list, NULL, insert, i, "dynamic begin");
+	if(insert_limit[NUM_INSERT_ID1] && insert_limit[NUM_INSERT_ID2]) {
+		trace_binder_ux_work(work, target_list, NULL, insert, i, "dynamic break");
+		return false;
+	}
+
 	BUG_ON(target_list == NULL);
 	BUG_ON(work->entry.next && !list_empty(&work->entry));
 
@@ -845,23 +860,44 @@ static bool binder_dynamic_enqueue_work_ilocked(struct binder_work *work,
 		if (IS_ERR_OR_NULL(t)) {
 			break;
 		}
-		if (binder_is_sync_mode(t->flags)) {
-			continue;
+		if (sync_insert) {
+			if (!binder_is_sync_mode(t->flags)) {
+				continue;
+			}
+			if (!t->from) {
+				continue;
+			}
+			if ((test_task_ux(t->from->task) || test_task_is_rt(t->from->task))) {
+				continue;
+			}
+			binder_ux_state_systrace(current, NULL, STATE_SYNC_INSERT_QUEUE, LOG_BINDER_SYSTRACE_LVL0);
+		} else {
+			if (binder_is_sync_mode(t->flags)) {
+				continue;
+			}
+			obs = get_oplus_binder_struct(t, false);
+			if (is_obs_valid(obs) != OBS_VALID) {
+				insert = true;
+				break;
+			}
+			if (obs->async_ux_enable) {
+				continue;
+			}
+			binder_ux_state_systrace(current, NULL, STATE_ASYNC_INSERT_QUEUE, LOG_BINDER_SYSTRACE_LVL0);
 		}
-		obs = get_oplus_binder_struct(t, false);
-		if (is_obs_valid(obs) != OBS_VALID) {
-			insert = true;
-			break;
-		}
-		if (obs->async_ux_enable) {
-			continue;
-		}
+
 		insert = true;
 		break;
+
 	}
 
 	if (insert && !IS_ERR_OR_NULL(w) && !IS_ERR_OR_NULL(&w->entry)) {
 		list_add(&work->entry, &w->entry);
+		if(!insert_limit[NUM_INSERT_ID1] && (t->debug_id != insert_limit[NUM_INSERT_ID2])) {
+			insert_limit[NUM_INSERT_ID1] = t->debug_id;
+		} else if (!insert_limit[NUM_INSERT_ID2] && (t->debug_id != insert_limit[NUM_INSERT_ID1])) {
+			insert_limit[NUM_INSERT_ID2] = t->debug_id;
+		}
 	} else {
 		list_add_tail(&work->entry, target_list);
 	}
@@ -874,6 +910,7 @@ static void android_vh_binder_special_task_handler(void *unused, struct binder_t
 	struct list_head *target_list, bool sync, bool *enqueue_task)
 {
 	struct oplus_binder_struct *obs = NULL;
+	bool allow_sync_insert = false;
 
 	if (unlikely(!g_sched_enable) || unlikely(!g_async_ux_enable)
 		|| unlikely(!async_insert_queue)) {
@@ -881,6 +918,19 @@ static void android_vh_binder_special_task_handler(void *unused, struct binder_t
 	}
 
 	if (sync) {
+		/* called by binder_proc_transaction() when no binder_thread selected */
+		if (sync_insert_queue && t && proc && (&proc->todo == target_list)) {
+			if(proc->tsk && t->from
+				&& (test_set_inherit_ux(t->from->task) || test_task_is_rt(t->from->task))
+				&& !strncmp(proc->tsk->comm, SYSTEM_SERVER_NAME, TASK_COMM_LEN)) {
+				allow_sync_insert = true;
+				goto dynamic_enqueue;
+			}
+		}
+		return;
+	}
+
+	if (unlikely(!async_insert_queue)) {
 		return;
 	}
 
@@ -895,8 +945,9 @@ static void android_vh_binder_special_task_handler(void *unused, struct binder_t
 	if (is_obs_valid(obs) != OBS_VALID) {
 		return;
 	}
-	if (obs->async_ux_enable == ASYNC_UX_ENABLE_INSERT_QUEUE) {
-		if (binder_dynamic_enqueue_work_ilocked(w, target_list)) {
+dynamic_enqueue:
+	if ((obs && obs->async_ux_enable == ASYNC_UX_ENABLE_INSERT_QUEUE) || allow_sync_insert) {
+		if (binder_dynamic_enqueue_work_ilocked(w, target_list, allow_sync_insert)) {
 			/*
 			if enqueue_task == false, binder_dynamic_enqueue_work_ilocked list_add_xxx is called,
 			don't call binder.c binder_enqueue_work_ilocked() again.
@@ -1251,6 +1302,7 @@ module_param_named(binder_sched_debug, g_sched_debug, ullong, 0660);
 module_param_named(binder_async_ux_test, async_ux_test, uint, 0660);
 module_param_named(binder_ux_enable, g_async_ux_enable, int, 0664);
 module_param_named(binder_async_insert_queue, async_insert_queue, int, 0664);
+module_param_named(binder_sync_insert_queue, sync_insert_queue, uint, 0664);
 module_param_named(binder_set_last_async_ux, g_set_last_async_ux, int, 0664);
 module_param_named(binder_set_async_ux_after_pending, g_set_async_ux_after_pending, int, 0664);
 

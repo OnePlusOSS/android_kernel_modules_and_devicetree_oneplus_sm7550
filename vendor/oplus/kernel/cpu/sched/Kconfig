@@ -145,6 +145,12 @@ config OPLUS_CPUFREQ_IOWAIT_PROTECT
 	help
 		ensure iowait decay not happen too quickly
 
+config OPLUS_CAMERA_UX
+ 	bool "config camera ux"
+ 	default n
+ 	help
+ 	  config camera ux.
+
 config OPLUS_FEATURE_AUDIO_OPT
 	tristate "camera optimization in audio mode"
 	default n

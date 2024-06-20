@@ -1,22 +1,22 @@
 {
     "best_target_priority": 1,
-    "bid": "11250828",
-    "branch": "aosp_kernel-common-android13-5.15-2023-12",
+    "bid": "11738397",
+    "branch": "aosp_kernel-common-android13-5.15-2024-01",
     "branch_priority": 1,
     "build_configs": {},
     "build_dependencies": [],
     "build_type": "submitted",
     "dependency_targets": [],
-    "device_dir": "/mnt/disks/build-disk/src/android/common-android13-5.15-2023-12",
+    "device_dir": "/mnt/disks/build-disk/src/android/common-android13-5.15-2024-01",
     "docker_image": "gcr.io/android-build-farm/abfarm1404@sha256:eea0f48fdf99dea28d00278c82435030d59398f7e5357d29aa78f11664498aaa",
     "enable_docker": true,
     "git-pull": null,
     "git-server": "https://android.googlesource.com",
-    "hostname": "r-1103eb7e97c0d965-xdf6",
+    "hostname": "r-aed28e15c2e98075-nr43",
     "inc-build": false,
     "java-version": null,
     "last_logfile": null,
-    "out_dir": "/mnt/disks/build-disk/src/android/common-android13-5.15-2023-12/out",
+    "out_dir": "/mnt/disks/build-disk/src/android/common-android13-5.15-2024-01/out",
     "parsed_manifest": {
         "parsedDefault": {
             "remote": "aosp",
@@ -82,10 +82,10 @@
                     "name": "aosp",
                     "review": "https://android.googlesource.com/"
                 },
-                "revision": "4464f9f77c4f918d0c3d26735a3f016fc021a685"
+                "revision": "3288d7ac659694818a76e0208383f9a78fb74e65"
             },
             {
-                "destBranch": "android13-5.15-2023-12",
+                "destBranch": "android13-5.15-2024-01",
                 "linkFiles": [
                     {
                         "dest": ".source_date_epoch_dir",
@@ -99,8 +99,8 @@
                     "name": "aosp",
                     "review": "https://android.googlesource.com/"
                 },
-                "revision": "40c7fb3ef038594691c63c353669e7523f67cb73",
-                "upstream": "android13-5.15-2023-12"
+                "revision": "99538831203c0824fb34365f8458ce7110d0b907",
+                "upstream": "android13-5.15-2024-01"
             },
             {
                 "name": "kernel/tests",
@@ -267,7 +267,7 @@
                 "remote": {
                     "fetch": "https://android.googlesource.com/"
                 },
-                "revision": "f32e5a176ae78636088094234694ad4d5172e7d8"
+                "revision": "f7b2b651209e34d4fd40a9bf6ec685ed3815fedb"
             }
         ],
         "remotes": [
@@ -284,17 +284,17 @@
                 "name": "aosp",
                 "review": "https://android.googlesource.com/"
             },
-            "revision": "common-android13-5.15-2023-12"
+            "revision": "common-android13-5.15-2024-01"
         }
     },
     "platform": "linux",
     "proof_build": false,
     "repo-dict": {
-        "kernel/build": "4464f9f77c4f918d0c3d26735a3f016fc021a685",
-        "kernel/common": "40c7fb3ef038594691c63c353669e7523f67cb73",
+        "kernel/build": "3288d7ac659694818a76e0208383f9a78fb74e65",
+        "kernel/common": "99538831203c0824fb34365f8458ce7110d0b907",
         "kernel/common-modules/virtual-device": "deede4fddac274575cb0e26498fc0f4a718229fb",
         "kernel/configs": "b3cc2bc03dab303c54a9ce1f709f8ee315eb311d",
-        "kernel/manifest": "f32e5a176ae78636088094234694ad4d5172e7d8",
+        "kernel/manifest": "f7b2b651209e34d4fd40a9bf6ec685ed3815fedb",
         "kernel/prebuilts/build-tools": "083e34d8c2c4239be4967172427268c267585951",
         "kernel/tests": "42a77670ce44d6e19a6fbb8b93fa0b06f009a3a4",
         "platform/build/bazel_common_rules": "ddd2d82d10e21fb4137d2db3c1b848d6f1832acc",
@@ -309,14 +309,14 @@
         "platform/system/tools/mkbootimg": "2208a03d874255af1e4eaf6cf7c156fe1dc98943",
         "toolchain/prebuilts/ndk/r23": "93532f3052c14fbb337ff57d5732128dc7481ee6"
     },
-    "repo-init-branch": "common-android13-5.15-2023-12",
+    "repo-init-branch": "common-android13-5.15-2024-01",
     "repo-manifest": "kernel/manifest",
     "repo_manifest_file": "default.xml",
     "reset_image_build": false,
     "rollout": [],
     "src_ctrl": "repo",
-    "sync_finish_time": 1703248500.0792532,
-    "sync_start_time": 1703248483.5958266,
+    "sync_finish_time": 1713531902.0165744,
+    "sync_start_time": 1713531890.9327765,
     "sync_succeed": 1,
     "target": {
         "apiary_target": "kernel_aarch64",
@@ -345,10 +345,9 @@
             "gki_certification_tools.tar.gz",
             "multiple.intoto.jsonl",
             "zram.ko",
+            "manifest_11738397.xml",
             "abi_symbollist",
-            "manifest_11087001.xml",
             "vmlinux.symvers",
-            "manifest_11250828.xml",
             "boot.img",
             "Image.lz4",
             "boot-img.tar.gz",
@@ -373,19 +372,19 @@
             "logs/resource_utilization/cpu_usage.json",
             "BUILD_INFO"
         ],
-        "dist-dir": "/buildbot/dist_dirs/aosp_kernel-common-android13-5.15-2023-12-linux-kernel_aarch64/11250828",
+        "dist-dir": "/buildbot/dist_dirs/aosp_kernel-common-android13-5.15-2024-01-linux-kernel_aarch64/11738397",
         "name": "kernel_aarch64",
         "rules": [
             [
-                "DIST_DIR=/buildbot/dist_dirs/aosp_kernel-common-android13-5.15-2023-12-linux-kernel_aarch64/11250828 BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j80",
+                "DIST_DIR=/buildbot/dist_dirs/aosp_kernel-common-android13-5.15-2024-01-linux-kernel_aarch64/11738397 BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j80",
                 "build.log",
                 true,
                 false
             ]
         ],
-        "storage_path": "/bigstore/android-build/builds/aosp_kernel-common-android13-5.15-2023-12-linux-kernel_aarch64/11250828/0015fd07415156bb05fce21b039c3c5d7d6e43f59512476e633b2200d2a98938",
-        "target_finish_time": 1703249730.2969546,
-        "target_start_time": 1703248501.1546907,
+        "storage_path": "/bigstore/android-build/builds/aosp_kernel-common-android13-5.15-2024-01-linux-kernel_aarch64/11738397/c7c36e78c3767f49e544a4b17b98e8e9f2249057985a9fe89ec79282b686180d",
+        "target_finish_time": 1713533386.59813,
+        "target_start_time": 1713531903.3875635,
         "target_status": 1
     },
     "trident_usage": {
@@ -394,55 +393,73 @@
     },
     "use_goma": false,
     "worknode": {
-        "containerId": "L79100030000970241",
-        "creationTimeMillis": "1703248420578",
+        "containerId": "L32900030003234455",
+        "creationTimeMillis": "1713531828042",
         "currentAttempt": {
-            "attemptId": "kjkwyWrOnZwpYuQnoJ6BzQ==",
+            "attemptId": "czB4EYdT+1g+w8PvB4lbMg==",
             "progressMessages": [
                 {
-                    "displayMessage": "Build 11250828 for node L79100030000970241:N50600030015966080 has been inserted",
-                    "messageString": "Build 11250828 for node L79100030000970241:N50600030015966080 has been inserted",
-                    "timeMillis": "1703248426913"
+                    "displayMessage": "Build 11738397 for node L32900030003234455:N15200030053056184 has been inserted",
+                    "messageString": "Build 11738397 for node L32900030003234455:N15200030053056184 has been inserted",
+                    "timeMillis": "1713531831542"
                 },
                 {
-                    "displayMessage": "Build 11250828 for node L79100030000970241:N50600030015966080 has been popped",
-                    "messageString": "Build 11250828 for node L79100030000970241:N50600030015966080 has been popped",
-                    "timeMillis": "1703248433879"
+                    "displayMessage": "Build 11738397 for node L32900030003234455:N15200030053056184 has been popped",
+                    "messageString": "Build 11738397 for node L32900030003234455:N15200030053056184 has been popped",
+                    "timeMillis": "1713531834451"
                 },
                 {
-                    "displayMessage": "Build 11250828 for node L79100030000970241:N50600030015966080 has been popped",
-                    "messageString": "Build 11250828 for node L79100030000970241:N50600030015966080 has been popped",
-                    "timeMillis": "1703248459097"
+                    "displayMessage": "Build 11738397 for node L32900030003234455:N15200030053056184 has been popped",
+                    "messageString": "Build 11738397 for node L32900030003234455:N15200030053056184 has been popped",
+                    "timeMillis": "1713531835572"
+                },
+                {
+                    "displayMessage": "Build 11738397 for node L32900030003234455:N15200030053056184 has been popped",
+                    "messageString": "Build 11738397 for node L32900030003234455:N15200030053056184 has been popped",
+                    "timeMillis": "1713531867630"
                 }
             ],
-            "startTimeMillis": "1703248421730"
+            "startTimeMillis": "1713531829418"
         },
         "heartbeatTimeMillis": "1200000",
-        "id": "L79100030000970241:N50600030015966080",
+        "id": "L32900030003234455:N15200030053056184",
         "inputEdges": [
             {
-                "neighborId": "L79100030000970241:N66700030015966077"
+                "neighborId": "L32900030003234455:N07000030053056181"
             }
         ],
         "isFinal": false,
-        "lastUpdatedMillis": "1703248459193",
+        "lastUpdatedMillis": "1713531867702",
         "nodeClass": "postsubmit",
         "retryStatus": {
             "maximumRetries": 4,
             "retryCount": 0
         },
-        "revision": "mni8q8N1zKOXFzOaFhqcKg==",
-        "revision": "NUDbV8A5V6ue8UzV+j808A==",
+        "revision": "OCGp3uzYfe7vEEhU2F+e0g==",
         "status": "scheduled",
+        "statusHistorys": [
+            {
+                "status": "created",
+                "timestampMillis": "1713531828042"
+            },
+            {
+                "status": "pending",
+                "timestampMillis": "1713531828544"
+            },
+            {
+                "status": "scheduled",
+                "timestampMillis": "1713531829418"
+            }
+        ],
         "workExecutorType": "submittedBuild",
         "workParameters": {
             "submittedBuild": {
-                "branch": "aosp_kernel-common-android13-5.15-2023-12",
+                "branch": "aosp_kernel-common-android13-5.15-2024-01",
                 "branchConfig": {
                     "sloTier": "bestEffort"
                 },
-                "buildId": "11250828",
-                "gerritPollerTimestamp": "1703248402981",
+                "buildId": "11738397",
+                "gerritPollerTimestamp": "1713531803183",
                 "manuallyTriggered": false,
                 "syncTimeoutSecond": 2700,
                 "target": {
@@ -459,7 +476,7 @@
                     "priority": "high",
                     "product": "kernel_aarch64",
                     "provenanceInfo": {
-                        "bbcpDepotContextCl": 585127163,
+                        "bbcpDepotContextCl": 591159607,
                         "bbcpFileApiPath": "/google_built/overlay/latest/busytown/google3/wireless/android/launchcontrol/config/branch_config.asciipb",
                         "branchConfigPath": "google3/wireless/android/launchcontrol/config/branch_config.asciipb"
                     },

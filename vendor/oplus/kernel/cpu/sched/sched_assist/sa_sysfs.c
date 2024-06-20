@@ -317,13 +317,45 @@ static const struct proc_ops proc_debug_enabled_fops = {
 	.proc_lseek		= default_llseek,
 };
 
+#ifdef CONFIG_LOCKING_PROTECT
+extern void record_lock_starttime(struct task_struct *tsk, unsigned long settime);
+void opt_ss_lock_contention(struct task_struct *p, int old_im, int new_im)
+{
+	if(new_im == IM_FLAG_SS_LOCK_OWNER) {
+		bool skip_scene = sched_assist_scene(SA_CAMERA);
+
+		if(unlikely(!global_sched_assist_enabled || skip_scene))
+			return;
+	}
+
+	/*if the task leave the critical section. clear the locking_state*/
+	if(old_im == IM_FLAG_SS_LOCK_OWNER) {
+		record_lock_starttime(p, 0);
+		goto out;
+	}
+
+	record_lock_starttime(p, jiffies);
+
+out:
+	if (unlikely(global_debug_enabled & DEBUG_FTRACE))
+		trace_printk("4.comm=%-12s pid=%d tgid=%d old_im=%d new_im=%d\n",
+			p->comm, p->pid, p->tgid, old_im, new_im);
+}
+#endif
+
 static int im_flag_set_handle(struct task_struct *task, int im_flag)
 {
 	struct oplus_task_struct *ots = get_oplus_task_struct(task);
+#ifdef CONFIG_LOCKING_PROTECT
+	int old_im;
+#endif
 
 	if (IS_ERR_OR_NULL(ots))
 		return 0;
 
+#ifdef CONFIG_LOCKING_PROTECT
+	old_im = ots->im_flag;
+#endif
 #ifdef CONFIG_OPLUS_CPU_AUDIO_PERF
 	oplus_sched_assist_audio_perf_addIm(task, im_flag);
 #endif
@@ -355,6 +387,13 @@ static int im_flag_set_handle(struct task_struct *task, int im_flag)
 		break;
 	}
 
+#ifdef CONFIG_LOCKING_PROTECT
+	/* Optimization of ams/wsm lock contention */
+	if ((old_im != im_flag) && (old_im == IM_FLAG_SS_LOCK_OWNER ||
+		im_flag == IM_FLAG_SS_LOCK_OWNER)) {
+			opt_ss_lock_contention(task, old_im, im_flag);
+		}
+#endif
 	return 0;
 }
 

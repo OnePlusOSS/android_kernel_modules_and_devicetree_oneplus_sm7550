@@ -138,6 +138,7 @@ static int panel_cabc_cmd_config(struct dsi_display *display, int mode)
 	/* enable the clk vote for CMD mode panels */
 	if (display->config.panel_mode == DSI_OP_CMD_MODE)
 		dsi_display_clk_ctrl(display->dsi_clk_handle, DSI_CORE_CLK, DSI_CLK_ON);
+	mutex_unlock(&display->display_lock);
 
 	mutex_lock(&display->panel->panel_lock);
 	rc = panel_cabc_cmd_config_unlock(display->panel, mode);
@@ -146,6 +147,7 @@ static int panel_cabc_cmd_config(struct dsi_display *display, int mode)
 	}
 	mutex_unlock(&display->panel->panel_lock);
 
+	mutex_lock(&display->display_lock);
 	if (display->config.panel_mode == DSI_OP_CMD_MODE)
 		dsi_display_clk_ctrl(display->dsi_clk_handle, DSI_CORE_CLK, DSI_CLK_OFF);
 

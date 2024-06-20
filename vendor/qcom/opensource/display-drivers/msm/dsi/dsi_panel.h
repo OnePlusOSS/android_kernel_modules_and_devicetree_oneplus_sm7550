@@ -207,6 +207,7 @@ struct dsi_panel_oplus_privite {
 	bool need_sync;
 	u32 disable_delay_bl_count;
 	bool gamma_switch_enable;
+	bool vid_timming_switch_enabled;
 };
 
 struct dsi_panel_oplus_serial_number {

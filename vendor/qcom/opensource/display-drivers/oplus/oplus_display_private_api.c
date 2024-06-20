@@ -100,7 +100,7 @@ EXPORT_SYMBOL(oplus_dimlayer_bl_enable);
 EXPORT_SYMBOL(oplus_dsi_log_type);
 EXPORT_SYMBOL(oplus_display_trace_enable);
 EXPORT_SYMBOL(backlight_smooth_enable);
-
+int shutdown_flag = 0;
 extern PANEL_VOLTAGE_BAK panel_vol_bak[PANEL_VOLTAGE_ID_MAX];
 extern u32 panel_pwr_vg_base;
 extern int seed_mode;
@@ -219,6 +219,11 @@ int dsi_panel_read_panel_reg(struct dsi_display_ctrl *ctrl,
 	cmdsreq.msg.rx_buf = rbuf;
 	cmdsreq.msg.rx_len = len;
 	cmdsreq.msg.flags |= MIPI_DSI_MSG_UNICAST_COMMAND;
+
+	if (!strcmp(panel->name, "dsi_oplus24675_samsung_ams667fk02_s6e8fc3_fhdp_vid") &&
+			panel->panel_mode == DSI_OP_VIDEO_MODE) {
+		cmdsreq.msg.flags |= MIPI_DSI_MSG_USE_LPM;
+	}
 
 	cmdsreq.ctrl_flags = DSI_CTRL_CMD_READ;
 
@@ -424,18 +429,18 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 		}
 	}
 
-	rc = dsi_display_cmd_engine_enable(display);
+	if (display->panel->panel_mode != DSI_OP_VIDEO_MODE) {
+		rc = dsi_display_cmd_engine_enable(display);
 
-	if (rc) {
-		LCD_ERR("cmd engine enable failed\n");
-		goto done;
+		if (rc) {
+			LCD_ERR("cmd engine enable failed\n");
+			goto done;
+		}
 	}
 
 	/* enable the clk vote for CMD mode panels */
-	if (display->config.panel_mode == DSI_OP_CMD_MODE) {
-		dsi_display_clk_ctrl(display->dsi_clk_handle,
-				DSI_ALL_CLKS, DSI_CLK_ON);
-	}
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_ON);
 
 	rc = dsi_panel_read_panel_reg(m_ctrl, display->panel, cmd, data, len);
 
@@ -446,13 +451,12 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 				cmd);
 	}
 
-	if (display->config.panel_mode == DSI_OP_CMD_MODE) {
-		rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
-				DSI_ALL_CLKS, DSI_CLK_OFF);
+	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_OFF);
+
+	if (display->panel->panel_mode != DSI_OP_VIDEO_MODE) {
+		dsi_display_cmd_engine_disable(display);
 	}
-
-	dsi_display_cmd_engine_disable(display);
-
 done:
 	mutex_unlock(&display->display_lock);
 	LCD_INFO("return: %d\n", rc);
@@ -3140,6 +3144,26 @@ static ssize_t oplus_display_set_panel_cabc(struct kobject *obj,
 	return count;
 }
 
+static ssize_t oplus_get_shutdownflag(struct kobject *obj,
+		struct kobj_attribute *attr, char *buf)
+{
+	printk(KERN_INFO "get shutdown_flag = %d\n", shutdown_flag);
+	return sprintf(buf, "%d\n", shutdown_flag);
+}
+
+static ssize_t oplus_set_shutdownflag(struct kobject *obj,
+		struct kobj_attribute *attr,
+		const char *buf, size_t count)
+{
+	int flag = 0;
+	sscanf(buf, "%du", &flag);
+	if (1 == flag) {
+		shutdown_flag = 1;
+	}
+	pr_err("shutdown_flag = %d\n", shutdown_flag);
+	return count;
+}
+
 static struct kobject *oplus_display_kobj;
 
 static OPLUS_ATTR(audio_ready, S_IRUGO | S_IWUSR, NULL,
@@ -3232,6 +3256,7 @@ static OPLUS_ATTR(aod_light_mode_set, S_IRUGO | S_IWUSR, oplus_ofp_get_aod_light
 static OPLUS_ATTR(ultra_low_power_aod_mode, S_IRUGO | S_IWUSR, oplus_ofp_get_ultra_low_power_aod_mode_attr, oplus_ofp_set_ultra_low_power_aod_mode_attr);
 static OPLUS_ATTR(LCM_CABC, S_IRUGO|S_IWUSR, oplus_display_get_panel_cabc, oplus_display_set_panel_cabc);
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+static OPLUS_ATTR(shutdownflag, S_IRUGO | S_IWUSR, oplus_get_shutdownflag, oplus_set_shutdownflag);
 
 /*
  * Create a group of attributes so that we can create and destroy them all
@@ -3295,6 +3320,7 @@ static struct attribute *oplus_display_attrs[] = {
 	&oplus_attr_ultra_low_power_aod_mode.attr,
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 	&oplus_attr_LCM_CABC.attr,
+	&oplus_attr_shutdownflag.attr,
 	NULL,	/* need to NULL terminate the list of attributes */
 };
 

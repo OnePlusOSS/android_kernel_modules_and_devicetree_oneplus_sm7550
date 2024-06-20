@@ -13,6 +13,7 @@
 static char *flow_buf = NULL;
 static char *flow_buf_curr = NULL;
 static int flow_index = 0;
+static int stage_index = 0;
 static int stage_start = 0;
 #define FLOW_SIZE 16
 #define STAGE_BRIEF_SIZE 64
@@ -30,6 +31,11 @@ static spinlock_t record_stage_spinlock;
 int get_systemserver_pid(void)
 {
 	return systemserver_pid;
+}
+
+void set_timer_started(bool enable)
+{
+	timer_started = enable;
 }
 
 static ssize_t powerkey_monitor_param_proc_read(struct file *file,
@@ -236,7 +242,12 @@ void record_stage(const char *buf)
 	if (!timer_started)
 		return;
 
-	POWER_MONITOR_DEBUG_PRINTK("%s: buf:%s flow_buf:%s flow_buf_curr:0x%s flow_index:%x\n", __func__, buf, flow_buf, flow_buf_curr, flow_index);
+	if (stage_index == (FLOW_SIZE -1)) {
+		POWER_MONITOR_DEBUG_PRINTK("record_stage buff size over, return");
+		return;
+	}
+
+	POWER_MONITOR_DEBUG_PRINTK("%s: buf:%s\n", __func__, buf);
 
 	spin_lock_irqsave(&record_stage_spinlock, flag);
 	memset(flow_buf_curr, 0, STAGE_BRIEF_SIZE);
@@ -245,6 +256,7 @@ void record_stage(const char *buf)
 
 	/* w lock index */
 	flow_index++;
+	stage_index++;
 	if(flow_index >= FLOW_SIZE) {
 		flow_index = 0;
 		flow_buf_curr = flow_buf;
@@ -362,6 +374,7 @@ void theia_pwk_stage_start(char *reason)
 {
 	POWER_MONITOR_DEBUG_PRINTK("theia_pwk_stage_start start %s:  %s   %x   flow_buf\n", flow_buf, flow_buf_curr, flow_index);
 	stage_start = flow_index;
+	stage_index = 0;
 	timer_started = true;
 	record_stage(reason);
 }

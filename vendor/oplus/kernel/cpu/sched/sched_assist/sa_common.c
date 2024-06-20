@@ -1066,7 +1066,8 @@ bool im_mali(char *comm)
 {
 	return !strcmp(comm, "mali-event-hand") ||
 		!strcmp(comm, "mali-mem-purge") || !strcmp(comm, "mali-cpu-comman") ||
-		!strcmp(comm, "mali-compiler");
+		!strcmp(comm, "mali-compiler") ||
+		!strcmp(comm, "mali-cmar-backe");
 }
 
 bool cgroup_check_set_sched_assist_boost(char *comm, struct task_struct *p)
@@ -1141,6 +1142,20 @@ void sched_assist_target_comm(struct task_struct *task, const char *buf)
 		ux_state = oplus_get_ux_state(task);
 		oplus_set_ux_state_lock(task, (ux_state | SA_TYPE_LIGHT), true);
 	}
+#ifdef CONFIG_OPLUS_CAMERA_UX
+	if (CAMERA_UID == task_uid(task).val) {
+		if (!strncmp(comm, CAMERA_PROVIDER_NAME, 15)) {
+			ux_state = oplus_get_ux_state(task);
+			oplus_set_ux_state_lock(task, (ux_state | SA_TYPE_HEAVY), true);
+		}
+	}
+#endif
+#ifdef CONFIG_OPLUS_CAMERA_UX
+	if (!strncmp(comm, "C2OMXNode", 15) || !strncmp(comm, "MP4WtrAudTrkThr", 15) || !strncmp(comm, "MP4WtrVidTrkThr", 15)) {
+			ux_state = oplus_get_ux_state(task);
+			oplus_set_ux_state_lock(task, (ux_state | SA_TYPE_ANIMATOR), true);
+	}
+#endif
 }
 
 void adjust_rt_lowest_mask(struct task_struct *p, struct cpumask *local_cpu_mask, int ret, bool force_adjust)

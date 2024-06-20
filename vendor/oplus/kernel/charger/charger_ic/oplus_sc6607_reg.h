@@ -25,7 +25,8 @@
 #define SC6607_CHG_CURRENT_MAX_MA	(4000)
 
 #define SC6607_AICL_POINT_VOL_9V 		7600
-#define SC6607_AICL_POINT_VOL_5V_HIGH	4250
+#define SC6607_DUAL_AICL_POINT_VOL_9V		8500
+#define SC6607_AICL_POINT_VOL_5V_HIGH		4250
 #define SC6607_AICL_POINT_VOL_5V_MID		4150
 #define SC6607_AICL_POINT_VOL_5V_LOW		4100
 #define SC6607_HW_AICL_POINT_VOL_5V_PHASE1 	4400
@@ -117,6 +118,7 @@ enum SC6607_VINDPM {
 	SC6607_VINDPM_4500,
 	SC6607_VINDPM_4600,
 	SC6607_VINDPM_4700,
+	SC6607_VINDPM_4800,
 	SC6607_VINDPM_7600,
 	SC6607_VINDPM_8200,
 	SC6607_VINDPM_8400,
@@ -701,6 +703,8 @@ struct sc6607 {
 	struct charger_device *chg_dev;
 
 	struct power_supply *psy;
+	struct power_supply *chg_psy;
+	struct power_supply_desc psy_desc;
 	int vbus_type;
 	int hw_aicl_point;
 	bool camera_on;
@@ -718,6 +722,7 @@ struct sc6607 {
 	int soft_bc12_type;
 	bool soft_bc12;
 	bool bc12_done;
+	bool open_adc_by_vbus;
 
 	char chg_power_info[OPLUS_CHG_TRACK_CURX_INFO_LEN];
 	char err_reason[OPLUS_CHG_TRACK_DEVICE_ERR_NAME_LEN];
@@ -752,6 +757,10 @@ struct sc6607 {
 	unsigned long long hvdcp_detect_time;
 	unsigned long long hvdcp_detach_time;
 	struct delayed_work sc6607_vol_convert_work;
+	struct delayed_work check_charger_out_work;
+
+	int  bc12_timeouts;
+	struct timer_list bc12_timeout;
 };
 
 struct sc6607_platform_data {
@@ -779,6 +788,7 @@ struct sc6607_platform_data {
 	u32 vpmid_ovp_otg_dis;
 	u32 vbat_ovp_buck_dis;
 	u32 ibat_ocp;
+	u32 ntc_suport_1000k;
 #ifdef OPLUS_FEATURE_CHG_BASIC
 /********* workaround: Octavian needs to enable adc start *********/
 	bool enable_adc;
@@ -796,6 +806,11 @@ struct sc6607_temp_param {
 	__s32 temperature_r;
 };
 
+struct sc6607_ntc_temp{
+	struct sc6607_temp_param *pst_temp_table;
+	int table_size;
+};
+
 struct sc6607_track_check_reg {
 	u8 addr;
 	u8 data;
@@ -808,5 +823,6 @@ int oplus_sc6607_read_vbus(void);
 int oplus_sc6607_read_ibus(void);
 int oplus_sc6607_read_vac(void);
 int oplus_sc6607_read_vsys(void);
+int oplus_sc6607_read_vbat(void);
 #endif /*__SC6607_H__*/
 

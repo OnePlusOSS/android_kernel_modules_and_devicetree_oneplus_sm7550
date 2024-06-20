@@ -33,9 +33,12 @@
 #define PPS_MONITOR_CYCLE_MS		1500
 #define PPS_WATCHDOG_TIME_MS		3000
 #define PPS_START_DEF_CURR_MA		1500
-#define PPS_START_DEF_VOL_MV		5000
+#define PPS_START_DEF_VOL_MV		5500
 #define PPS_MONITOR_TIME_MS		500
 #define OPLUS_FIXED_PDO_CURR_MA		3000
+#define OPLUS_FIXED_PDO_DEF_VOL		5000
+#define OPLUS_PPS_UW_MV_TRANSFORM	1000
+
 
 #define PPS_UPDATE_PDO_TIME		5
 #define PPS_UPDATE_FASTCHG_TIME	1
@@ -848,7 +851,7 @@ static int oplus_pps_switch_to_normal(struct oplus_pps *chip)
 	/* switch to 5v when switch to normal */
 	if (chip->wired_online)
 		rc = oplus_chg_ic_func(chip->pps_ic, OPLUS_IC_FUNC_FIXED_PDO_SET,
-				PPS_START_DEF_VOL_MV, OPLUS_FIXED_PDO_CURR_MA);
+				OPLUS_FIXED_PDO_DEF_VOL, OPLUS_FIXED_PDO_CURR_MA);
 
 	rc = oplus_chg_ic_func(chip->dpdm_switch,
 		OPLUS_IC_FUNC_SET_DPDM_SWITCH_MODE, DPDM_SWITCH_TO_AP);
@@ -1179,6 +1182,7 @@ static void oplus_pps_switch_check_work(struct work_struct *work)
 	int i;
 	bool pdo_ok = false;
 	int max_curr = 0;
+	int max_power = 0;
 	int target_vbus_max = 0;
 	int wired_type;
 
@@ -1248,13 +1252,23 @@ static void oplus_pps_switch_check_work(struct work_struct *work)
 		if (target_vbus_max <= PPS_PDO_VOL_MAX(chip->pdo[i].max_voltage100mv) &&
 		    target_vbus_max >= PPS_PDO_VOL_MIN(chip->pdo[i].min_voltage100mv)) {
 			pdo_ok = true;
-			if (PPS_PDO_CURR_MAX(chip->pdo[i].max_current50ma) > max_curr)
+			if (PPS_PDO_CURR_MAX(chip->pdo[i].max_current50ma) > max_curr) {
 				max_curr = PPS_PDO_CURR_MAX(chip->pdo[i].max_current50ma);
+				chg_info("adapter max_curr = %d\n", max_curr);
+			}
 		}
 	}
 	if (!pdo_ok) {
 		chg_err("The pdo range of the current adapter does not support PPS charging\n");
 		goto err;
+	}
+	rc = oplus_cpa_protocol_set_power(chip->cpa_topic, CHG_PROTOCOL_PPS, max_curr * target_vbus_max / OPLUS_PPS_UW_MV_TRANSFORM);
+	if (!rc) {
+		max_power = oplus_cpa_protocol_get_power(chip->cpa_topic, CHG_PROTOCOL_PPS);
+		if (max_power > 0) {
+			max_curr = max_power * OPLUS_PPS_UW_MV_TRANSFORM / target_vbus_max;
+			chg_info("final max_curr = %d\n", max_curr);
+		}
 	}
 	vote(chip->pps_curr_votable, BASE_MAX_VOTER, true, max_curr, false);
 	oplus_pps_variables_init(chip);
@@ -2102,6 +2116,10 @@ static void oplus_pps_check_low_curr_full(struct oplus_pps *chip)
 
 #define PPS_FULL_COUNTS_LOW_CURR	6
 
+	/* third pps not support low current full check */
+	if (!chip->oplus_pps_adapter)
+		return;
+
 	oplus_pps_check_low_curr_temp_status(chip);
 
 	if (!is_gauge_topic_available(chip)) {
@@ -2227,6 +2245,7 @@ static void oplus_pps_check_ibat_safety(struct oplus_pps *chip)
 	if (ibat > PPS_IBAT_LOW_MIN) {
 		chip->count.ibat_low++;
 		if (chip->count.ibat_low >= PPS_IBAT_LOW_CNT) {
+			chip->quit_pps_protocol = true;
 			vote(chip->pps_disable_votable, IBAT_OVER_VOTER, true, 1, false);
 			return;
 		}
@@ -2335,6 +2354,10 @@ static void oplus_pps_imp_check(struct oplus_pps *chip)
 {
 	int curr;
 	int rc;
+
+	/* third pps not support impedance check */
+	if (!chip->oplus_pps_adapter)
+		return;
 
 	if (!chip->imp_uint) {
 		/* prevent triggering watchdog */

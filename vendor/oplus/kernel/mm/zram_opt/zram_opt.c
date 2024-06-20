@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <trace/hooks/vmscan.h>
+#include <trace/hooks/mm.h>
 #include <trace/events/vmscan.h>
 #include <linux/swap.h>
 #include <linux/proc_fs.h>
@@ -75,9 +76,14 @@ static void zo_set_swappiness(void *data, int *swappiness)
 #else
 		*swappiness = g_swappiness;
 #endif
-	} else
-		*swappiness = g_direct_swappiness;
+	} else {
+		unsigned long file = global_node_page_state(NR_ACTIVE_FILE) +
+			global_node_page_state(NR_INACTIVE_FILE);
 
+		/* if file is tiny, do not change swappiness */
+		if (file > (SZ_512M >> PAGE_SHIFT))
+			*swappiness = g_direct_swappiness;
+	}
 	return;
 }
 
@@ -143,6 +149,11 @@ static void count_ux_allocstall(void *data, int order, gfp_t gfp_flags)
 		g_allocstall_ux += 1;
 }
 
+static void do_swap_page_spf(void *data, bool *allow_swap_spf)
+{
+	*allow_swap_spf = true;
+}
+
 static int register_zram_opt_vendor_hooks(void)
 {
 	int ret = 0;
@@ -185,6 +196,11 @@ static int register_zram_opt_vendor_hooks(void)
 		goto out;
 	}
 
+	ret = register_trace_android_vh_do_swap_page_spf(do_swap_page_spf, NULL);
+	if (ret != 0) {
+		pr_err("register_trace_android_vh_do_swap_page_spf failed! ret=%d\n", ret);
+		goto out;
+	}
 
 out:
 	return ret;
@@ -192,6 +208,7 @@ out:
 
 static void unregister_zram_opt_vendor_hooks(void)
 {
+	unregister_trace_android_vh_do_swap_page_spf(do_swap_page_spf, NULL);
 	unregister_trace_mm_vmscan_direct_reclaim_begin(count_ux_allocstall, NULL);
 	unregister_trace_android_vh_tune_swappiness(zo_set_swappiness, NULL);
 	/* unregister_trace_android_vh_tune_inactive_ratio(zo_set_inactive_ratio, NULL); */

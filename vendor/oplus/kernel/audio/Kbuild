@@ -12,6 +12,7 @@ obj-y += codecs/sipa/
 #add for aw87xxx pa
 obj-y += codecs/aw87xxx/
 obj-y += qcom/oplus_speaker_manager/
+obj-y += codecs/usbc_switch/
 
 else
 #MTK Platform
@@ -24,4 +25,5 @@ obj-$(CONFIG_SND_SOC_TFA_HAPTIC) += codecs/tfa_haptic/
 obj-$(CONFIG_SND_SOC_SIA81XX) += codecs/sia81xx/
 obj-$(CONFIG_SND_SOC_OPLUS_PA_MANAGER) += mtk/oplus_speaker_manager/
 obj-$(CONFIG_SND_SOC_OPLUS_TYPEC_SWITCH) += codecs/oplus_typec_switch/
+obj-$(CONFIG_SND_SOC_AW87XXX_2_X_0) += codecs/aw87xxx_2.x.0/
 endif

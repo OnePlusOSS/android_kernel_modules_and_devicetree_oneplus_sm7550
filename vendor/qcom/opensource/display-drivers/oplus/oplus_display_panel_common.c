@@ -37,6 +37,7 @@ int oplus_dither_enable = 0;
 int oplus_dre_status = 0;
 int oplus_cabc_status = OPLUS_DISPLAY_CABC_UI;
 extern int lcd_closebl_flag;
+extern int shutdown_flag;
 extern int oplus_display_audio_ready;
 char oplus_rx_reg[PANEL_TX_MAX_BUF] = {0x0};
 char oplus_rx_len = 0;
@@ -1684,11 +1685,16 @@ int oplus_display_panel_get_cabc_status(void *buf)
 	}
 	panel = display->panel;
 
-	if (!strcmp(panel->name, "AC166 P 3 A0013 video mode dsi panel")) {
+	if (!strcmp(panel->name, "AC166 P 3 A0013 video mode dsi panel")
+		|| !strcmp(panel->name, "AC166 P D A0018 video mode dsi panel")) {
 		rc = oplus_display_panel_get_cabc(buf);
 		return rc;
 	}
 
+	if (!strcmp(panel->name, "AC190 P D A0018 video mode dsi panel") || !strcmp(panel->name, "AC190 P 4 A0013 video mode dsi panel")) {
+		rc = oplus_display_panel_get_cabc(buf);
+		return rc;
+	}
 	mutex_lock(&display->display_lock);
 	mutex_lock(&panel->panel_lock);
 
@@ -1720,7 +1726,13 @@ int oplus_display_panel_set_cabc_status(void *buf)
 	}
 	panel = display->panel;
 
-	if (!strcmp(panel->name, "AC166 P 3 A0013 video mode dsi panel")) {
+	if (!strcmp(panel->name, "AC166 P 3 A0013 video mode dsi panel")
+		|| !strcmp(panel->name, "AC166 P D A0018 video mode dsi panel")) {
+		rc = oplus_display_panel_set_cabc(buf);
+		return rc;
+	}
+
+	if (!strcmp(panel->name, "AC190 P D A0018 video mode dsi panel") || !strcmp(panel->name, "AC190 P 4 A0013 video mode dsi panel")) {
 		rc = oplus_display_panel_set_cabc(buf);
 		return rc;
 	}
@@ -3201,4 +3213,13 @@ int oplus_display_panel_get_hbm_max(void *data)
 	LCD_INFO("Get hbm max state: %d\n", *hbm_max_state);
 
 	return rc;
+}
+
+int oplus_display_set_shutdown_flag(void *buf)
+{
+	shutdown_flag = 1;
+	pr_err("debug for %s, buf = [%s], shutdown_flag = %d\n",
+			__func__, buf, shutdown_flag);
+
+	return 0;
 }

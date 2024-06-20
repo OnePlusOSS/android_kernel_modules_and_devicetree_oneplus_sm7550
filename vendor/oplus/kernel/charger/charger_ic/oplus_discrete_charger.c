@@ -35,6 +35,8 @@
 
 #include "oplus_mp2650.h"
 #include "../gauge_ic/oplus_bq27541.h"
+#include "../gauge_ic/oplus_cw2217b.h"
+#include "../gauge_ic/oplus_optiga/oplus_optiga.h"
 #ifdef CONFIG_OPLUS_SM6375R_CHARGER
 #include "../gauge_ic/oplus_sm5602.h"
 #include "../wireless_ic/oplus_ra9530.h"
@@ -199,6 +201,7 @@ extern struct oplus_chg_operations  sgm41511_chg_ops;
 extern int sy6970_adc_read_charge_current(void);
 extern int oplus_usbtemp_monitor_common_new_method(void *data);
 static int charger_ic__det_flag = 0;
+static struct oplus_discrete_charger g_oplus_discrete_charger;
 
 int get_charger_ic_det(struct oplus_chg_chip *chip)
 {
@@ -254,8 +257,10 @@ static int oplus_get_iio_channel(struct smb_charger *chg, const char *propname,
 
 	rc = of_property_match_string(chg->dev->of_node,
 					"io-channel-names", propname);
-	if (rc < 0)
+	if (rc < 0) {
+		dev_err(chg->dev, "oplus_get_iio_channel %s miss\n",propname);
 		return 0;
+	}
 
 	*chan = iio_channel_get(chg->dev, propname);
 	if (IS_ERR(*chan)) {
@@ -268,38 +273,47 @@ static int oplus_get_iio_channel(struct smb_charger *chg, const char *propname,
 	return rc;
 }
 
-static int oplus_parse_dt_adc_channels(struct smb_charger *chg)
+static void oplus_parse_dt_adc_channels(struct work_struct *work)
 {
+	static int retry_count = 100;
 	int rc = 0;
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						parse_dt_adc_channels_work.work);
 
 	rc = oplus_get_iio_channel(chg, "chgid_v_chan", &chg->iio.chgid_v_chan);
 	if (rc < 0)
-		return rc;
+		goto retry;
 
 	rc = oplus_get_iio_channel(chg, "usbtemp_r_v_chan", &chg->iio.usbtemp_r_v_chan);
 	if (rc < 0)
-		return rc;
+		goto retry;
 
 	rc = oplus_get_iio_channel(chg, "usbtemp_l_v_chan", &chg->iio.usbtemp_l_v_chan);
 	if (rc < 0)
-		return rc;
+		goto retry;
 
 	rc = oplus_get_iio_channel(chg, "batbtb_temp_chan", &chg->iio.batbtb_temp_chan);
 	if (rc < 0)
-		return rc;
+		goto retry;
 
 	rc = oplus_get_iio_channel(chg, "usbbtb_temp_chan", &chg->iio.usbbtb_temp_chan);
 	if (rc < 0)
-		return rc;
+		goto retry;
 
 	rc = oplus_get_iio_channel(chg, "subboard_temp_chan", &chg->iio.subboard_temp_chan);
 	if (rc < 0)
-		return rc;
+		goto retry;
 
-	return 0;
+	return;
+retry:
+	if (retry_count > 0) {
+		pr_info("oplus_parse_dt_adc_channels\n");
+		retry_count--;
+		schedule_delayed_work(&chg->parse_dt_adc_channels_work, msecs_to_jiffies(100));
+	}
+	return;
 }
 
-#define ERROR_BATT_TEMP -400
 #define DEFAULT_SUBBOARD_TEMP	250
 #define DIV_FACTOR_DECIDEGC	100
 int oplus_get_subboard_temp(void)
@@ -313,10 +327,6 @@ int oplus_get_subboard_temp(void)
 		chg_err("chip is NULL\n");
 		temp = DEFAULT_SUBBOARD_TEMP;
 		goto done;
-	}
-
-	if (oplus_gauge_get_i2c_err() > 0) {
-		return ERROR_BATT_TEMP;;
 	}
 
 	chg = &chip->pmic_spmi.smb5_chip->chg;
@@ -353,7 +363,10 @@ int oplus_chg_get_battery_btb_temp_cal(void)
 		goto done;
 	}
 	if (chip->chg_ops->get_cp_tsbat) {
-		temp = chip->chg_ops->get_cp_tsbat() * UNIT_TRANS_1000;
+		if (g_oplus_discrete_charger.sc6607_switch_ntc)
+			temp = chip->chg_ops->get_cp_tsbus();
+		else
+			temp = chip->chg_ops->get_cp_tsbat() * UNIT_TRANS_1000;
 	} else {
 		chg = &chip->pmic_spmi.smb5_chip->chg;
 
@@ -385,8 +398,16 @@ int oplus_chg_get_usb_btb_temp_cal(void)
 		goto done;
 	}
 
+	if (chip->not_support_usb_btb) {
+		chg_err("Not support usb btb!\n");
+		goto done;
+	}
+
 	if (charger_ic__det_flag  == (1 << SC6607) && chip->chg_ops->get_cp_tsbus) {
-		temp = chip->chg_ops->get_cp_tsbus() * UNIT_TRANS_1000;
+		if (g_oplus_discrete_charger.sc6607_switch_ntc)
+			temp = chip->chg_ops->get_cp_tsbat();
+		else
+			temp = chip->chg_ops->get_cp_tsbus() * UNIT_TRANS_1000;
 	} else {
 		chg = &chip->pmic_spmi.smb5_chip->chg;
 
@@ -1190,6 +1211,28 @@ void oplus_get_usbtemp_volt(struct oplus_chg_chip *chip)
 }
 EXPORT_SYMBOL(oplus_get_usbtemp_volt);
 
+int oplus_get_usbtemp_volt_l(void)
+{
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (chip == NULL) {
+		return 0;
+	}
+
+	return chip->usbtemp_volt_l;
+}
+
+int oplus_get_usbtemp_volt_r(void)
+{
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (chip == NULL) {
+		return 0;
+	}
+
+	return chip->usbtemp_volt_r;
+}
+
 static int oplus_dischg_gpio_init(struct oplus_chg_chip *chip)
 {
 	if (!chip) {
@@ -1375,6 +1418,7 @@ static int oplus_chg_parse_custom_dt(struct oplus_chg_chip *chip)
 	}
 
 	if (g_oplus_chip) {
+		g_oplus_discrete_charger.sc6607_switch_ntc = of_property_read_bool(node, "qcom,sc6607_switch_ntc");
 		g_oplus_chip->normalchg_gpio.dischg_gpio = of_get_named_gpio(node, "qcom,dischg-gpio", 0);
 		g_oplus_chip->usbtemp_chan_tmp = of_property_read_bool(node, "qcom,usbtemp_chan_tmp");
 		if (g_oplus_chip->normalchg_gpio.dischg_gpio <= 0) {
@@ -1489,6 +1533,7 @@ static int oplus_chg_parse_custom_dt(struct oplus_chg_chip *chip)
 		chg->pd_not_rise_vbus_only_5v = of_property_read_bool(node, "qcom,pd_not_rise_vbus_only_5v");
 		g_oplus_chip->tbatt_use_subboard_temp = of_property_read_bool(node, "oplus,tbatt_use_subboard_temp");
 		g_oplus_chip->support_shipmode_in_chgic = of_property_read_bool(node, "oplus,support_shipmode_in_chgic");
+		g_oplus_chip->not_support_usb_btb = of_property_read_bool(node, "oplus,not_support_usb_btb");
 	}
 #endif
 	return rc;
@@ -1735,6 +1780,7 @@ int oplus_sm8150_get_pd_type(void)
 	return PD_INACTIVE;
 }
 
+#define PD_SWITCH_POLICY_DELAY_MS 100
 static int oplus_pdc_setup(int *vbus_mv, int *ibus_ma)
 {
 	int ret = 0;
@@ -1747,6 +1793,12 @@ static int oplus_pdc_setup(int *vbus_mv, int *ibus_ma)
 		printk(KERN_ERR "%s:get type_c_port0 fail\n", __func__);
 		return -EINVAL;
 	}
+	ret = tcpm_set_pd_charging_policy(tcpc, DPM_CHARGING_POLICY_MAX_POWER_LVIC, NULL);
+	if (ret != TCPM_SUCCESS) {
+		printk(KERN_ERR "%s: tcpm_set_apdo_charging_policy fail\n", __func__);
+		return -EINVAL;
+	}
+	msleep(PD_SWITCH_POLICY_DELAY_MS);
 
 	ret = tcpm_dpm_pd_request(tcpc, *vbus_mv, *ibus_ma, NULL);
 	if (ret != TCPM_SUCCESS) {
@@ -1898,8 +1950,8 @@ int oplus_chg_set_pd_config(void)
 			return -1;
 		}
 	} else {
-		if (chip->limits.vbatt_pdqc_to_5v_thr > 0 && chip->charger_volt > VBUS_9V_THR_MV
-			&& chip->batt_volt > chip->limits.vbatt_pdqc_to_5v_thr) {
+		if (((chip->limits.vbatt_pdqc_to_5v_thr > 0 && chip->batt_volt > chip->limits.vbatt_pdqc_to_5v_thr)
+		    || chip->cool_down_force_5v) && chip->charger_volt > VBUS_9V_THR_MV) {
 			chip->chg_ops->input_current_write(PDO_9V_TO_5V_IBUS_MA);
 			oplus_chg_suspend_charger();
 			oplus_chg_config_charger_vsys_threshold(0x03);//set Vsys Skip threshold 101%
@@ -1920,7 +1972,7 @@ int oplus_chg_set_pd_config(void)
 			msleep(REQUEST_PDO_DELAY_MS);
 			printk(KERN_ERR "%s: charger voltage=%d", __func__, qpnp_get_prop_charger_voltage_now());
 			oplus_chg_unsuspend_charger();
-		} else if (chip->batt_volt < chip->limits.vbatt_pdqc_to_9v_thr) {
+		} else if (chip->batt_volt < chip->limits.vbatt_pdqc_to_9v_thr && !chip->cool_down_force_5v) {
 			oplus_voocphy_set_pdqc_config();
 			oplus_chg_suspend_charger();
 			oplus_chg_config_charger_vsys_threshold(0x02);//set Vsys Skip threshold 104%
@@ -1940,8 +1992,6 @@ int oplus_chg_set_pd_config(void)
 int oplus_chg_set_pps_config(int vbus_mv, int ibus_ma)
 {
 	int ret = 0;
-	int vbus_mv_t = 0;
-	int ibus_ma_t = 0;
 	struct tcpc_device *tcpc = NULL;
 
 	chg_info("request vbus_mv[%d], ibus_ma[%d]", vbus_mv, ibus_ma);
@@ -1969,15 +2019,6 @@ int oplus_chg_set_pps_config(int vbus_mv, int ibus_ma)
 		chg_err("tcpm_dpm_pd_request fail");
 		return -EINVAL;
 	}
-
-	ret = tcpm_inquire_pd_contract(tcpc, &vbus_mv_t, &ibus_ma_t);
-	if (ret != TCPM_SUCCESS) {
-		chg_err("inquire current vbus_mv and ibus_ma fail");
-		return -EINVAL;
-	}
-
-	chg_info("inquire_pd_contract vbus_mv_t[%d], ibus_ma_t[%d]", vbus_mv_t, ibus_ma_t);
-
 	return ret;
 }
 
@@ -2136,7 +2177,7 @@ int oplus_pps_pd_exit(void)
 		return -EINVAL;
 	}
 
-	ret = tcpm_set_pd_charging_policy(tcpc, DPM_CHARGING_POLICY_VSAFE5V, NULL);
+	ret = tcpm_set_pd_charging_policy(tcpc, tcpc->pd_port.dpm_charging_policy_default, NULL);
 
 	ret = tcpm_dpm_pd_request(tcpc, vbus_mv_t, ibus_ma_t, NULL);
 	if (ret != TCPM_SUCCESS) {
@@ -2467,7 +2508,7 @@ static int oplus_discrete_batt_get_prop(struct power_supply *psy,
 			val->intval = chip->batt_fcc * UNIT_TRANS_1000;
 			break;
 		case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-			val->intval = chip->ui_soc * chip->batt_capacity_mah * UNIT_TRANS_1000 / FULL_SOC;
+			val->intval = chip->batt_rm * 1000;
 			break;
 		default:
 			rc = oplus_battery_get_property(psy, psp, val);
@@ -2950,7 +2991,8 @@ static int discrete_charger_probe(struct platform_device *pdev)
 	oplus_chg_parse_custom_dt(oplus_chip);
 	oplus_chg_parse_charger_dt(oplus_chip);
 	oplus_chg_2uart_pinctrl_init(oplus_chip);
-	oplus_parse_dt_adc_channels(chg);
+	INIT_DELAYED_WORK(&chg->parse_dt_adc_channels_work, oplus_parse_dt_adc_channels);
+	schedule_delayed_work(&chg->parse_dt_adc_channels_work, msecs_to_jiffies(0));
 	oplus_chg_init(oplus_chip);
 
 	oplus_chip->con_volt = con_volt_pmr735a;
@@ -3071,8 +3113,10 @@ static int __init discrete_charger_init(void)
 	oplus_vooc_get_fastchg_started_pfunc(&oplus_vooc_get_fastchg_started);
 	oplus_vooc_get_fastchg_ing_pfunc(&oplus_vooc_get_fastchg_ing);
 #endif
+	oplus_optiga_driver_init();
 	adapter_ic_init();
 	bq27541_driver_init();
+	cw2217_init();
 #ifdef CONFIG_OPLUS_SM6375R_CHARGER
 	sm5602_driver_init();
 #endif
@@ -3125,7 +3169,9 @@ static void __exit discrete_charger_exit(void)
 	sm5602_driver_exit();
 #endif
 	bq27541_driver_exit();
+	cw2217_exit();
 	adapter_ic_exit();
+	oplus_optiga_driver_exit();
 }
 oplus_chg_module_register(discrete_charger);
 #endif

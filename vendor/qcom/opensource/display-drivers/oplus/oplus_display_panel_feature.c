@@ -196,7 +196,16 @@ int oplus_panel_features_config(struct dsi_panel *panel)
 		panel->oplus_priv.pwm_switch_support = false;
 	}
 
-	if(!strcmp(panel->name, "AC166 P 3 A0013 video mode dsi panel")) {
+	if(!strcmp(panel->name, "AC166 P 3 A0013 video mode dsi panel")
+		|| !strcmp(panel->name, "AC166 P D A0018 video mode dsi panel")) {
+		LCD_INFO("%s panel support two gamma \n", panel->name);
+		panel->oplus_priv.gamma_switch_enable = utils->read_bool(utils->data,
+			"oplus,mdss-dsi-gamma-switch-enabled");
+		DSI_INFO("oplus,mdss-dsi-gamma-switch-enabled: %s",
+			panel->oplus_priv.gamma_switch_enable ? "true" : "false");
+	}
+
+	if (!strcmp(panel->name, "AC190 P D A0018 video mode dsi panel") || !strcmp(panel->name, "AC190 P 4 A0013 video mode dsi panel")) {
 		LCD_INFO("%s panel support two gamma \n", panel->name);
 		panel->oplus_priv.gamma_switch_enable = utils->read_bool(utils->data,
 			"oplus,mdss-dsi-gamma-switch-enabled");
@@ -205,6 +214,11 @@ int oplus_panel_features_config(struct dsi_panel *panel)
 	}
 
 	oplus_panel_get_serial_number_info(panel);
+
+	panel->oplus_priv.vid_timming_switch_enabled = utils->read_bool(utils->data,
+		"oplus,dsi-vid-timming-switch_enable");
+	LCD_INFO("oplus,panel_init_compatibility_enable: %s\n",
+		panel->oplus_priv.vid_timming_switch_enabled ? "true" : "false");
 
 	return 0;
 }
@@ -247,6 +261,63 @@ int oplus_panel_post_on_backlight(void *display, struct dsi_panel *panel, u32 bl
 		panel->post_power_on = true;
 	}
 	return 0;
+}
+
+void oplus_panel_switch_vid_mode(struct dsi_display *display, struct dsi_display_mode *mode)
+{
+	int rc = 0;
+	int refresh_rate = 0;
+	int dsi_cmd_vid_switch = 0;
+	struct dsi_panel *panel = NULL;
+
+	if (!display && !display->panel) {
+		LCD_INFO("display/panel is null!\n");
+		return;
+	}
+
+	if (!mode) {
+		LCD_INFO("dsi_display_mode is null!\n");
+		return;
+	}
+
+	panel = display->panel;
+	if (panel->power_mode != SDE_MODE_DPMS_ON) {
+		LCD_INFO("display panel in off status\n");
+		return;
+	}
+
+	if (!dsi_panel_initialized(panel)) {
+		OFP_ERR("should not set panel hbm if panel is not initialized\n");
+		return;
+	}
+
+	if (!panel->oplus_priv.vid_timming_switch_enabled) {
+		LCD_ERR("oplus_panel_switch_vid_mode not support\n");
+		return;
+	}
+
+	refresh_rate = mode->timing.refresh_rate;
+
+	if (refresh_rate == 120) {
+		dsi_cmd_vid_switch = DSI_CMD_VID_120_SWITCH;
+	} else if (refresh_rate == 60) {
+		dsi_cmd_vid_switch = DSI_CMD_VID_60_SWITCH;
+	} else {
+		return;
+	}
+
+	SDE_ATRACE_BEGIN("oplus_panel_switch_vid_mode");
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, dsi_cmd_vid_switch);
+	mutex_unlock(&panel->panel_lock);
+	if (rc) {
+		LCD_INFO("[%s] failed to send DSI_CMD_VID_SWITCH cmds, rc=%d\n",
+			panel->name, rc);
+	}
+	SDE_ATRACE_END("oplus_panel_switch_vid_mode");
+
+	return;
 }
 
 u32 oplus_panel_silence_backlight(struct dsi_panel *panel, u32 bl_lvl)
