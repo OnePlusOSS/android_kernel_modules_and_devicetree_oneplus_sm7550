@@ -24,10 +24,6 @@
 #include "osi_debug.h"
 #include "osi_amu.h"
 
-/* For each probe you need to allocate a kprobe structure */
-static struct kprobe kp = {
-	.symbol_name	= "kernel_clone",
-};
 
 
 pid_t global_pid;
@@ -297,14 +293,9 @@ static ssize_t proc_osi_amu_uid_read(struct file *file, char __user *buf,
 			uid = uid_struct->uid;
 			if (++i > uid_cnt)
 				return -EFAULT;
-			if (strlen(uid_struct->leader_comm) <= strlen(uid_struct->cmdline))
-				len += snprintf(buffer + len, alloc_bytes - len, "%10d,%s,%llu,%llu\n",
-					uid_struct->uid, uid_struct->cmdline,
-					uid_struct->uid_total_inst, uid_struct->uid_total_cycle);
-			else
-				len += snprintf(buffer + len, alloc_bytes - len, "%10d,%s,%llu,%llu\n",
-					uid_struct->uid, uid_struct->leader_comm,
-					uid_struct->uid_total_inst, uid_struct->uid_total_cycle);
+			len += snprintf(buffer + len, alloc_bytes - len, "%10d,%s,%llu,%llu\n",
+				uid_struct->uid, uid_struct->leader_comm,
+				uid_struct->uid_total_inst, uid_struct->uid_total_cycle);
 		}
 	}
 	spin_unlock(&amu_uid_lock);
@@ -440,7 +431,7 @@ void osi_task_rename_handler(void *unused, struct task_struct *tsk, const char *
 }
 
 
-static void __kprobes fork_handler_post(struct kprobe *p, struct pt_regs *regs,
+static void  __maybe_unused __kprobes fork_handler_post(struct kprobe *p, struct pt_regs *regs,
 					unsigned long flags)
 {
 	char *cmd = NULL;
@@ -505,12 +496,6 @@ int osi_amu_init(struct proc_dir_entry *pde)
 		REGISTER_TRACE_RVH(android_rvh_sched_fork_init, android_rvh_sched_fork_init_handler);
 		/* register vender hook in fs/exec.c */
 		REGISTER_TRACE_VH(task_rename, osi_task_rename_handler);
-		kp.post_handler = fork_handler_post;
-		ret = register_kprobe(&kp);
-		if (ret < 0) {
-			pr_err("register_kprobe failed, returned %d\n", ret);
-			return ret;
-		}
 	}
 	return ret;
 }
@@ -523,7 +508,6 @@ int osi_amu_exit(struct proc_dir_entry *pde)
 		UNREGISTER_TRACE_RVH(android_rvh_commit_creds, android_rvh_commit_creds_handler);
 		UNREGISTER_TRACE_RVH(android_rvh_sched_fork_init, android_rvh_sched_fork_init_handler);
 		UNREGISTER_TRACE_VH(task_rename, osi_task_rename_handler);
-		unregister_kprobe(&kp);
 	}
 	osi_amu_proc_deinit(pde);
 	return ret;

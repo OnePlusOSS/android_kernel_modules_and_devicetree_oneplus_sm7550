@@ -30,6 +30,8 @@
 #ifdef CONFIG_LOCKING_PROTECT
 #include "sched_assist_locking.h"
 #endif
+#include "sa_sysfs.h"
+
 
 extern unsigned int sysctl_sched_latency;
 
@@ -293,6 +295,11 @@ EXPORT_SYMBOL(should_ux_task_skip_eas);
 		for (; se; se = NULL)
 #endif
 
+int is_audio_scene(void)
+{
+	return save_audio_tgid > 0;
+}
+
 extern void set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se);
 void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct sched_entity **se, bool *repick, bool simple)
 {
@@ -338,6 +345,13 @@ void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct 
 			continue;
 		}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_AUDIO_OPT)
+		if (is_audio_scene() && (ots->im_flag == IM_FLAG_AUDIO_CAMERA_HAL)) {
+			update_ux_timeline_task_removal(orq, ots);
+			put_task_struct(temp);
+			continue;
+		}
+#endif
 		*p = temp;
 		*se = &temp->se;
 		*repick = true;
@@ -353,8 +367,8 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 	struct oplus_rq *orq;
 	struct oplus_task_struct *ots;
 	unsigned long irqflag;
-	bool wake_ux;
-	bool curr_ux;
+	bool wake_ux = false;
+	bool curr_ux = false;
 
 	/* this cpu is running in this function, no rcu primitives needed*/
 	curr = rq->curr;
@@ -374,8 +388,19 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 	if (likely(!global_sched_assist_enabled))
 		return;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_AUDIO_OPT)
+	if (is_audio_scene()) {
+		wake_ux = (oplus_get_im_flag(p) == IM_FLAG_AUDIO_CAMERA_HAL) ? false : test_task_ux(p);
+		curr_ux = (ots->im_flag == IM_FLAG_AUDIO_CAMERA_HAL) ? false : test_task_ux(curr);
+	}
+	else {
+		wake_ux = test_task_ux(p);
+		curr_ux = test_task_ux(curr);
+	}
+#else
 	wake_ux = test_task_ux(p);
 	curr_ux = test_task_ux(curr);
+#endif
 
 	if (!wake_ux && !curr_ux)
 		return;
@@ -661,6 +686,11 @@ void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *ta
 
 	rq = task_rq(task);
 	orq = (struct oplus_rq *) rq->android_oem_data1;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_AUDIO_OPT)
+	if (is_audio_scene() && (ots->im_flag == IM_FLAG_AUDIO_CAMERA_HAL))
+		return;
+#endif
 
 	if (oplus_rbnode_empty(&ots->ux_entry) && (!oplus_rbtree_empty(&orq->ux_list))) {
 		resched_curr(rq);

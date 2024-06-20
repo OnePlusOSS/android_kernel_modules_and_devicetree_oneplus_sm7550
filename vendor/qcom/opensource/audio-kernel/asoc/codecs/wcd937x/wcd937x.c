@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -39,7 +39,13 @@
 #define WCD937X_VERSION_ENTRY_SIZE 32
 #define EAR_RX_PATH_AUX 1
 
+#ifndef OPLUS_ARCH_EXTENDS
+/* add sufficient delay to enumerate wcd tx slave, CR3252303 */
 #define NUM_ATTEMPTS 5
+#else /* OPLUS_ARCH_EXTENDS */
+#define NUM_ATTEMPTS 20
+#endif /* OPLUS_ARCH_EXTENDS */
+
 
 #define WCD937X_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
 			SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |\
@@ -1752,8 +1758,14 @@ static int wcd937x_get_logical_addr(struct swr_device *swr_dev)
 			dev_err(&swr_dev->dev,
 				"%s get devnum %d for dev addr %lx failed\n",
 				__func__, devnum, swr_dev->addr);
+#ifndef OPLUS_ARCH_EXTENDS
+			/* add sufficient delay to enumerate wcd tx slave, CR3252303 */
 			/* retry after 1ms */
 			usleep_range(1000, 1010);
+#else /* OPLUS_ARCH_EXTENDS */
+			/* retry after 4ms */
+			usleep_range(4000, 4010);
+#endif /* OPLUS_ARCH_EXTENDS */
 		}
 	} while (ret && --num_retry);
 	swr_dev->dev_num = devnum;
@@ -3360,7 +3372,12 @@ static int wcd937x_reset(struct device *dev)
 	if (rc) {
 		dev_err(dev, "%s: wcd sleep state request fail!\n",
 				__func__);
+#ifndef OPLUS_ARCH_EXTENDS
+		/* fix wcd prob err when msm-cdc-pinctrl prob delay,CR3717597 */
 		return rc;
+#else /* OPLUS_ARCH_EXTENDS */
+		return -EPROBE_DEFER;
+#endif /* OPLUS_ARCH_EXTENDS */
 	}
 	/* 20ms sleep required after pulling the reset gpio to LOW */
 	usleep_range(20, 30);
@@ -3369,7 +3386,12 @@ static int wcd937x_reset(struct device *dev)
 	if (rc) {
 		dev_err(dev, "%s: wcd active state request fail!\n",
 				__func__);
+#ifndef OPLUS_ARCH_EXTENDS
+		/* fix wcd prob err when msm-cdc-pinctrl prob delay,CR3717597 */
 		return rc;
+#else /* OPLUS_ARCH_EXTENDS */
+		return -EPROBE_DEFER;
+#endif /* OPLUS_ARCH_EXTENDS */
 	}
 	/* 20ms sleep required after pulling the reset gpio to HIGH */
 	usleep_range(20, 30);
@@ -3593,7 +3615,16 @@ static int wcd937x_bind(struct device *dev)
 		goto err_bind_all;
 	}
 
+#ifndef OPLUS_ARCH_EXTENDS
+	/* fix wcd prob err when msm-cdc-pinctrl prob delay,CR3717597 */
 	wcd937x_reset(dev);
+#else /* OPLUS_ARCH_EXTENDS */
+	ret = wcd937x_reset(dev);
+	if (ret == -EPROBE_DEFER) {
+		dev_err(dev, "%s: wcd reset failed!\n", __func__);
+		goto err_bind_all;
+	}
+#endif /* OPLUS_ARCH_EXTENDS */
 	/*
 	 * Add 5msec delay to provide sufficient time for
 	 * soundwire auto enumeration of slave devices as

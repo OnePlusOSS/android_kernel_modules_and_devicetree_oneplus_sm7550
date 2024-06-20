@@ -104,6 +104,7 @@
 #define SYSTEM_UID             1000
 #define FIRST_APPLICATION_UID  10000
 #define LAST_APPLICATION_UID   19999
+#define SCHED_UX_STATE_DEBUG_MAGIC  123456789
 
 extern pid_t save_audio_tgid;
 extern pid_t save_top_app_tgid;
@@ -151,6 +152,7 @@ enum IM_FLAG_TYPE {
 	IM_FLAG_FORBID_SET_CPU_AFFINITY, /* forbid setting cpu affinity from app */
 	IM_FLAG_SYSTEMSERVER_PID,
 	IM_FLAG_MIDASD,
+	IM_FLAG_AUDIO_CAMERA_HAL, /* audio mode disable camera hal ux */
 	MAX_IM_FLAG_TYPE,
 };
 
