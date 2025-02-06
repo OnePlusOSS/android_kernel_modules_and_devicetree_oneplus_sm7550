@@ -2308,6 +2308,7 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-switch-to-page0-command",
 	"qcom,mdss-dsi-backlight-gamma-enter-command",
 	"qcom,mdss-dsi-backlight-gamma-exit-command",
+	"qcom,mdss-dsi-nolp2-command",
 #endif /* OPLUS_FEATURE_DISPLAY */
 #if defined(CONFIG_PXLW_IRIS)
 	"qcom,mdss-dsi-iris-switch-tsp-vsync-scanline-command",
@@ -2539,6 +2540,7 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-switch-to-page0-command-state",
 	"qcom,mdss-dsi-backlight-gamma-enter-command-state",
 	"qcom,mdss-dsi-backlight-gamma-exit-command-state",
+	"qcom,mdss-dsi-nolp2-command-state",
 #endif /* OPLUS_FEATURE_DISPLAY */
 #if defined(CONFIG_PXLW_IRIS)
 	"qcom,mdss-dsi-iris-switch-tsp-vsync-scanline-command-state",
@@ -5281,7 +5283,16 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 	     panel->power_mode == SDE_MODE_DPMS_LP2))
 		dsi_pwr_panel_regulator_mode_set(&panel->power_info,
 			"ibb", REGULATOR_MODE_NORMAL);
+#ifdef OPLUS_FEATURE_DISPLAY
+	/* xueying S 3 A001 , use DSI_CMD_SET_NOLP_2 when power on for long AOD */
+	if (!strcmp(panel->name, "AC052 S 3 A0001 dsc cmd mode panel") && (panel->power_state == SDE_MODE_DPMS_ON)) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP_2);
+	} else {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+	}
+#else
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+#endif /* OPLUS_FEATURE_DISPLAY */
 	if (rc)
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 		       panel->name, rc);
@@ -5629,8 +5640,8 @@ int dsi_panel_switch(struct dsi_panel *panel)
 			oplus_sde_early_wakeup(panel);
 			oplus_wait_for_vsync(panel);
 			oplus_need_to_sync_te(panel);
-			usleep_range(3000, 3000);
-			DSI_INFO("%s,%d\n", __func__, __LINE__);
+			usleep_range(2000, 2000);
+			DSI_INFO("%s:%d\n", __func__, __LINE__);
 		}
 	} else if (oplus_panel_pwm_onepulse_is_enabled(panel)) {
 		oplus_sde_early_wakeup(panel);

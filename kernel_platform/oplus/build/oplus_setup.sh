@@ -87,11 +87,15 @@ choose_platform()
             variants_platform=waipio
             pre_path=waipio
         ;;
-		2)
+	2)
             variants_platform=kalama
             pre_path=kernel
         ;;
-		kalama)
+	kalama)
+            variants_platform=kalama
+            pre_path=kernel
+        ;;
+        crow)
             variants_platform=kalama
             pre_path=kernel
         ;;
@@ -99,8 +103,8 @@ choose_platform()
             variants_platform=parrot
         ;;
        *)
-            variants_platform=waipio
-            pre_path=waipio
+            variants_platform=kalama
+            pre_path=kernel
         ;;
     esac
     echo "now default auto select platform $variants_platform "

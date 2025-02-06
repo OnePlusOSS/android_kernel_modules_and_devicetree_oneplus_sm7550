@@ -965,7 +965,7 @@ int oplus_shift_sensor_mode(struct cam_sensor_ctrl_t *s_ctrl)
 		ov32c_array_write.size = 1;
 		ov32c_array_write.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
 		ov32c_array_write.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
-		ov32c_array_write.delay = 5;
+		ov32c_array_write.delay = 1;
 
 		rc = camera_io_dev_write(&(s_ctrl->io_master_info),&ov32c_array_write);
 		CAM_INFO(CAM_SENSOR, "write result %d", rc);
@@ -983,7 +983,7 @@ int oplus_shift_sensor_mode(struct cam_sensor_ctrl_t *s_ctrl)
 		ov32c_array_write.size = 1;
 		ov32c_array_write.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
 		ov32c_array_write.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
-		ov32c_array_write.delay = 5;
+		ov32c_array_write.delay = 1;
 
 		rc = camera_io_dev_write(&(s_ctrl->io_master_info),&ov32c_array_write);
 		CAM_INFO(CAM_SENSOR, "write result %d", rc);

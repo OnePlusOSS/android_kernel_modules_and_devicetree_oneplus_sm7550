@@ -2526,7 +2526,7 @@ bool fbg_rt_task_fits_capacity(struct task_struct *tsk, int cpu)
 		return true;
 
 	raw_util = atomic64_read(&grp->policy_util);
-	grp_util = raw_util + schedtune_grp_margin(raw_util, stune_boost[BOOST_SF_IN_GPU] ? stune_boost[BOOST_SF_MIGR_GPU] : stune_boost[BOOST_SF_FREQ_NONGPU]);
+	grp_util = raw_util + schedtune_grp_margin(raw_util, stune_boost[BOOST_SF_IN_GPU] ? stune_boost[BOOST_SF_MIGR_GPU] : stune_boost[BOOST_SF_MIGR_NONGPU]);
 
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_FAKE_CAP)
 	fits = real_cpu_cap[cpu] >= grp_util;

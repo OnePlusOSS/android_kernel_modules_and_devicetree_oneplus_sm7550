@@ -384,6 +384,11 @@
 	qcom,usbtemp_cool_down_recover_gap_low = <6>;
 	qcom,usbtemp_cool_down_recover_gap_high = <15>;
 
+	oplus,poweroff_high_batt_temp = <720>;
+	oplus,poweroff_emergency_batt_temp = <770>;
+	oplus,usbtemp_batt_temp_over_hot = <60>;
+	oplus,usbtemp_temp_gap_with_batt_temp_in_over_hot = <15>;
+
 	qcom,vbatt_power_off = <3300>;
 	qcom,vbatt_soc_1 = <3310>;
 	qcom,vooc_project = <8>;

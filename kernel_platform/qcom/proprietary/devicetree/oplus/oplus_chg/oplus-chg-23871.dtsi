@@ -281,8 +281,11 @@
 		oplus_spec,vbat_uv_thr_mv = <3300>;
 		oplus_spec,vbat_charging_uv_thr_mv = <3200>;
 
-		/*If use subboard NTC as battery temp, config it as 20, otherwise 0 */
-		oplus_spec,tbatt_power_off_cali_temp = <20>;
+		/* High temperature long-term solution for Battery bulge */
+		oplus_spec,tbatt_power_off_cali_temp = <0>;
+		oplus_spec,poweroff_high_batt_temp = <720>;
+		oplus_spec,poweroff_emergency_batt_temp = <770>;
+
 		oplus,vooc_show_ui_soc_decimal;
 		oplus,ui_soc_decimal_speedmin = <20>;
 
@@ -315,6 +318,14 @@
 		oplus,smart_chg_bcc_support;
 
 		oplus,abnormal_adapter_current = <CURR_LIMIT_7BIT_9_5A CURR_LIMIT_7BIT_9_5A
+						CURR_LIMIT_7BIT_5_0A CURR_LIMIT_7BIT_5_0A
+						CURR_LIMIT_7BIT_4_0A CURR_LIMIT_7BIT_4_0A
+						CURR_LIMIT_7BIT_3_0A CURR_LIMIT_7BIT_3_0A
+						CURR_LIMIT_7BIT_2_0A CURR_LIMIT_7BIT_2_0A>;
+
+		oplus,abnormal_over_80w_adapter_current = <CURR_LIMIT_7BIT_9_5A CURR_LIMIT_7BIT_9_5A
+						CURR_LIMIT_7BIT_7_0A CURR_LIMIT_7BIT_7_0A
+						CURR_LIMIT_7BIT_6_0A CURR_LIMIT_7BIT_6_0A
 						CURR_LIMIT_7BIT_5_0A CURR_LIMIT_7BIT_5_0A
 						CURR_LIMIT_7BIT_4_0A CURR_LIMIT_7BIT_4_0A
 						CURR_LIMIT_7BIT_3_0A CURR_LIMIT_7BIT_3_0A
@@ -424,6 +435,11 @@
 			oplus,usbtemp_batttemp_gap = <10>;
 			oplus,adc_info_name = "855";
 			oplus,topic-update-interval = <5000>;
+
+			/* High temperature long-term solution for Battery bulge*/
+			high-temp-scheme;
+			oplus_spec,usbtemp_batt_temp_over_hot = <60>;
+			oplus_spec,usbtemp_temp_gap_with_batt_temp_in_over_hot = <15>;
 
 			oplus,support_usbtemp_protect_v2;
 			oplus_spec,usbtemp_batt_temp_low = <50>;
