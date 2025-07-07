@@ -568,8 +568,16 @@ static int im_flag_set_handle(struct task_struct *task, int im_flag)
 {
 	struct oplus_task_struct *ots = get_oplus_task_struct(task);
 
+#ifdef CONFIG_LOCKING_PROTECT
+	unsigned long old_im;
+#endif
+
 	if (IS_ERR_OR_NULL(ots))
 		return 0;
+
+#ifdef CONFIG_LOCKING_PROTECT
+	old_im = ots->im_flag;
+#endif
 
 #ifdef CONFIG_OPLUS_CPU_AUDIO_PERF
 	oplus_sched_assist_audio_perf_addIm(task, im_flag);
@@ -596,6 +604,13 @@ static int im_flag_set_handle(struct task_struct *task, int im_flag)
 
 		oplus_set_ux_state_lock(task, ux_state | SA_TYPE_HEAVY, true);
 		}
+#ifdef CONFIG_LOCKING_PROTECT
+	/* Optimization of ams/wsm lock contention */
+	if ((!(test_bit(IM_FLAG_SS_LOCK_OWNER, &old_im) && (im_flag == IM_FLAG_SS_LOCK_OWNER))) ||
+		((test_bit(IM_FLAG_SS_LOCK_OWNER, &old_im) && im_flag == (IM_FLAG_SS_LOCK_OWNER+IM_FLAG_CLEAR)))) {
+			opt_ss_lock_contention(task, old_im, im_flag);
+		}
+#endif
 	return 0;
 }
 
@@ -915,7 +930,7 @@ static ssize_t proc_lowend_plat_opt_read(struct file *file, char __user *buf,
 	char buffer[32];
 	size_t len = 0;
 
-	len = snprintf(buffer, sizeof(buffer), "lowend_plat_opt=%d\n", global_lowend_plat_opt);
+	len = snprintf(buffer, sizeof(buffer), "%d\n", global_lowend_plat_opt);
 
 	return simple_read_from_buffer(buf, count, ppos, buffer, len);
 }

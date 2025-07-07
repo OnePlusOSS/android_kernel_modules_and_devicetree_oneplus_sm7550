@@ -694,10 +694,6 @@ static int cam_sfe_bus_rd_out_done_top_half(
 	rc  = cam_sfe_bus_rd_get_evt_payload(rsrc_data->common_data,
 			&evt_payload);
 	if (rc) {
-		CAM_INFO_RATE_LIMIT(CAM_SFE,
-			"Failed to get payload for SFE:%d Bus IRQ status_0: 0x%X status_1: 0x%X",
-			rsrc_data->common_data->core_index,
-			th_payload->evt_status_arr[0]);
 		return rc;
 	}
 

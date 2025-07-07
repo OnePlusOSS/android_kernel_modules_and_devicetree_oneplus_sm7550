@@ -657,7 +657,7 @@
 	qcom,chg_ctrl_by_camera;
 	qcom,sw_vfloat_over_protect_enable;
 	qcom,usbtemp_batttemp_gap = <12>;
-	oplus,aging_ffc_version = <1>;
+	oplus_spec,dec-vol-fv-mv = <40>;
 	oplus,adsp_chg_use_ap_gauge;
 
 	//for PD9V or QC9V

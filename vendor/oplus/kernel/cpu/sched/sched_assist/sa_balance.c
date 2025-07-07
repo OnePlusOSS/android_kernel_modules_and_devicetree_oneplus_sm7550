@@ -2447,7 +2447,7 @@ static noinline bool oplus_tickpull_runnable_rt(void *data,
 			 * Ha, rt_task can be migrated to this_cpu to perform enqueue
 			 * and dequeue operations.
 			 */
-			deactivate_task(busiest_rq, rt_task, DEQUEUE_NOCLOCK);
+			deactivate_task(busiest_rq, rt_task, 0);
 			set_task_cpu(rt_task, this_cpu);
 			rq_unlock(busiest_rq, &rf);
 
@@ -2457,9 +2457,7 @@ static noinline bool oplus_tickpull_runnable_rt(void *data,
 			 * in tick_balance, so you need to actively call preempt_curr
 			 * to send an ipi interrupt to wake it up.
 			 */
-			rq_lock(rq, &rf);
-			attach_task(rq, rt_task);
-			rq_unlock(rq, &rf);
+			attach_one_task(rq, rt_task);
 
 			oplus_loadbalance_systrace_print(OPLUS_LB_SYSTRACE_PID,
 					"tickpull_runnable_rt_cpu", busiest_cpu, rt_task->pid);
@@ -2730,9 +2728,7 @@ static noinline bool oplus_tickpull_runnable_ux(void *data, struct rq *rq)
 			 * in tick_balance, so you need to actively call preempt_curr
 			 * to send an ipi interrupt to wake it up.
 			 */
-			rq_lock(rq, &rf);
-			attach_task(rq, iter_task);
-			rq_unlock(rq, &rf);
+			attach_one_task(rq, iter_task);
 
 			oplus_loadbalance_systrace_print(OPLUS_LB_SYSTRACE_PID,
 					"tickpull_runnable_ux_cpu", iter_cpu, iter_task->pid);

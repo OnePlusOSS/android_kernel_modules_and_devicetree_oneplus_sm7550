@@ -32,6 +32,9 @@
 #define FRAME_GAME           (1 << 3)
 #define FRAME_INPUTMETHOD    (1 << 4)
 
+#define FRAME_PENDING        (1 << 5)
+#define PENDING_FRAME_TASK   (1 << 6)
+
 #define DEFAULT_BINDER_DEPTH (2)
 #define MAX_BINDER_THREADS   (6)
 #define INVALID_FBG_DEPTH    (-1)
@@ -392,18 +395,23 @@ static struct syscore_ops fbg_syscore_ops = {
 /***************************************************
  * add/remove static frame task to/from frame group
  ***************************************************/
-static void remove_task_from_frame_group(struct task_struct *tsk)
+static struct task_struct* remove_task_from_frame_group(struct task_struct *tsk)
 {
+	struct task_struct *task_removed = NULL;
 	struct oplus_task_struct *ots = get_oplus_task_struct(tsk);
 	struct frame_group *grp = NULL;
 
 	if (IS_ERR_OR_NULL(ots))
-		return;
+		return task_removed;
+
+	/*
+	 * NOTE:
+	 * Hold the fbg_list_entry_lock lock BEFORE getting the grp of the task.
+	 */
+	raw_spin_lock(&ots->fbg_list_entry_lock);
 
 	grp = task_get_frame_group(ots);
 	frame_grp_with_lock_assert(grp);
-
-	raw_spin_lock(&ots->fbg_list_entry_lock);
 
 	if (ots->fbg_state & STATIC_FRAME_TASK) {
 		list_del_init(&ots->fbg_list);
@@ -424,8 +432,9 @@ static void remove_task_from_frame_group(struct task_struct *tsk)
 			if (unlikely(grp->nr_running < 0))
 				grp->nr_running = 0;
 		}
-
-		put_task_struct(tsk);
+		/*BUG: 7976822*/
+		/*put_task_struct(tsk);*/
+		task_removed = tsk;
 	}
 
 	raw_spin_unlock(&ots->fbg_list_entry_lock);
@@ -437,23 +446,27 @@ static void remove_task_from_frame_group(struct task_struct *tsk)
 		atomic64_set(&grp->curr_util, 0);
 		grp->nr_running = 0;
 	}
+
+	return task_removed;
 }
 
-static void clear_all_static_frame_task(struct frame_group *grp)
+static void clear_all_static_frame_task(struct frame_group *grp, struct list_head *task_list)
 {
-	struct oplus_task_struct *ots = NULL;
-	struct oplus_task_struct *tmp = NULL;
-	struct task_struct *p = NULL;
+	struct oplus_task_struct *ots;
+	struct oplus_task_struct *tmp;
 
 	list_for_each_entry_safe(ots, tmp, &grp->tasks, fbg_list) {
-		p = ots_to_ts(ots);
+		struct task_struct *p = ots_to_ts(ots);
 
 		raw_spin_lock(&ots->fbg_list_entry_lock);
 
 		if (ots->fbg_state & STATIC_FRAME_TASK) {
-			list_del_init(&ots->fbg_list);
+			list_move(&ots->fbg_list, task_list);
+			ots->fbg_state = (FRAME_PENDING | PENDING_FRAME_TASK);
+			/*BUG: 7976822*/
+			/*list_del_init(&ots->fbg_list);
 			ots->fbg_state = NONE_FRAME_TASK;
-			ots->fbg_depth = INVALID_FBG_DEPTH;
+			ots->fbg_depth = INVALID_FBG_DEPTH;*/
 
 			if (p == grp->ui) {
 				grp->ui = NULL;
@@ -470,7 +483,8 @@ static void clear_all_static_frame_task(struct frame_group *grp)
 					grp->nr_running = 0;
 			}
 
-			put_task_struct(p);
+			/*BUG: 7976822*/
+			/*put_task_struct(p);*/
 		}
 
 		raw_spin_unlock(&ots->fbg_list_entry_lock);
@@ -485,18 +499,40 @@ static void clear_all_static_frame_task(struct frame_group *grp)
 	}
 }
 
-static void add_task_to_frame_group(struct frame_group *grp, struct task_struct *task)
+static void release_frame_task_list(struct list_head *task_list)
+{
+	struct oplus_task_struct *ots = NULL;
+	struct oplus_task_struct *tmp = NULL;
+	unsigned long flags;
+
+	local_irq_save(flags);
+	list_for_each_entry_safe(ots, tmp, task_list, fbg_list) {
+		struct task_struct *p = ots_to_ts(ots);
+		raw_spin_lock(&ots->fbg_list_entry_lock);
+
+		if (ots->fbg_state & PENDING_FRAME_TASK) {
+			list_del_init(&ots->fbg_list);
+			ots->fbg_state = NONE_FRAME_TASK;
+			ots->fbg_depth = INVALID_FBG_DEPTH;
+		}
+		raw_spin_unlock(&ots->fbg_list_entry_lock);
+		put_task_struct(p);
+	}
+	local_irq_restore(flags);
+}
+
+static bool add_task_to_frame_group(struct frame_group *grp, struct task_struct *task)
 {
 	struct oplus_task_struct *ots = get_oplus_task_struct(task);
 
 	if (IS_ERR_OR_NULL(ots))
-		return;
+		return false;
 
 	raw_spin_lock(&ots->fbg_list_entry_lock);
 
 	if (ots->fbg_state || task->flags & PF_EXITING) {
 		raw_spin_unlock(&ots->fbg_list_entry_lock);
-		return;
+		return false;
 	}
 
 	get_task_struct(task);
@@ -514,11 +550,13 @@ static void add_task_to_frame_group(struct frame_group *grp, struct task_struct 
 	ots->fbg_depth = 0;
 
 	raw_spin_unlock(&ots->fbg_list_entry_lock);
+	return true;
 }
 
 void set_ui_thread(int grp_id, int pid, int tid)
 {
 	unsigned long flags;
+	LIST_HEAD(task_list);
 	raw_spinlock_t *lock = NULL;
 	struct task_struct *ui;
 	struct frame_group *grp;
@@ -534,16 +572,17 @@ void set_ui_thread(int grp_id, int pid, int tid)
 	rcu_read_lock();
 	ui = find_task_by_vpid(pid);
 
-	if (grp->ui)
-		clear_all_static_frame_task(grp);
+	if (grp->ui) {
+		clear_all_static_frame_task(grp, &task_list);
+	}
 
-	if (ui) {
+	if (ui && add_task_to_frame_group(grp, ui)) {
 		grp->ui = ui;
 		grp->ui_pid = pid;
-		add_task_to_frame_group(grp, ui);
 	}
 	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(lock, flags);
+	release_frame_task_list(&task_list);
 }
 EXPORT_SYMBOL_GPL(set_ui_thread);
 
@@ -552,6 +591,7 @@ void set_render_thread(int grp_id, int pid, int tid)
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
 	struct task_struct *render;
+	struct task_struct *task_removed = NULL;
 	struct frame_group *grp;
 
 	id_get_group(grp_id, &grp, &lock);
@@ -566,15 +606,17 @@ void set_render_thread(int grp_id, int pid, int tid)
 	render = find_task_by_vpid(tid);
 
 	if (grp->render)
-		remove_task_from_frame_group(grp->render);
+		task_removed = remove_task_from_frame_group(grp->render);
 
-	if (render) {
+	if (render && add_task_to_frame_group(grp, render)) {
 		grp->render = render;
 		grp->render_pid = tid;
-		add_task_to_frame_group(grp, render);
 	}
 	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(lock, flags);
+	if (task_removed) {
+		put_task_struct(task_removed);
+	}
 }
 EXPORT_SYMBOL_GPL(set_render_thread);
 
@@ -582,6 +624,8 @@ void set_hwui_thread(int grp_id, int pid, int hwtid1, int hwtid2)
 {
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
+	struct task_struct *task_to_remove1 = NULL;
+	struct task_struct *task_to_remove2 = NULL;
 	struct task_struct *hwtask1, *hwtask2;
 	struct frame_group *grp;
 
@@ -598,20 +642,28 @@ void set_hwui_thread(int grp_id, int pid, int hwtid1, int hwtid2)
 	hwtask2 = find_task_by_vpid(hwtid2);
 
 	if (grp->hwtask1)
-		remove_task_from_frame_group(grp->hwtask1);
+		task_to_remove1 = remove_task_from_frame_group(grp->hwtask1);
 	if (grp->hwtask2)
-		remove_task_from_frame_group(grp->hwtask2);
+		task_to_remove2 = remove_task_from_frame_group(grp->hwtask2);
 
-	if (hwtask1 && hwtask2) {
+	if (hwtask1 && add_task_to_frame_group(grp, hwtask1)) {
 		grp->hwtask1 = hwtask1;
-		grp->hwtask2 = hwtask2;
 		grp->hwtid1 = hwtid1;
-		grp->hwtid2 = hwtid2;
-		add_task_to_frame_group(grp, hwtask1);
-		add_task_to_frame_group(grp, hwtask2);
 	}
+
+	if (hwtask2 && add_task_to_frame_group(grp, hwtask2)) {
+		grp->hwtask2 = hwtask2;
+		grp->hwtid2 = hwtid2;
+	}
+
 	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(lock, flags);
+	if (task_to_remove1) {
+		put_task_struct(task_to_remove1);
+	}
+	if (task_to_remove2) {
+		put_task_struct(task_to_remove2);
+	}
 }
 EXPORT_SYMBOL_GPL(set_hwui_thread);
 
@@ -627,6 +679,7 @@ EXPORT_SYMBOL_GPL(get_frame_group_ui);
 void set_sf_thread(int pid, int tid)
 {
 	unsigned long flags;
+	LIST_HEAD(task_list);
 	struct task_struct *ui;
 	struct frame_group *grp = &sf_composition_group;
 
@@ -639,22 +692,24 @@ void set_sf_thread(int pid, int tid)
 	rcu_read_lock();
 	ui = find_task_by_vpid(pid);
 
-	if (grp->ui)
-		clear_all_static_frame_task(grp);
+	if (grp->ui) {
+		clear_all_static_frame_task(grp, &task_list);
+	}
 
-	if (ui) {
+	if (ui && add_task_to_frame_group(grp, ui)) {
 		grp->ui = ui;
 		grp->ui_pid = pid;
-		add_task_to_frame_group(grp, ui);
 	}
 	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(&sf_fbg_lock, flags);
+	release_frame_task_list(&task_list);
 }
 EXPORT_SYMBOL_GPL(set_sf_thread);
 
 void set_renderengine_thread(int pid, int tid)
 {
 	unsigned long flags;
+	struct task_struct *task_removed = NULL;
 	struct task_struct *render;
 	struct frame_group *grp = &sf_composition_group;
 
@@ -668,15 +723,17 @@ void set_renderengine_thread(int pid, int tid)
 	render = find_task_by_vpid(tid);
 
 	if (grp->render)
-		remove_task_from_frame_group(grp->render);
+		task_removed = remove_task_from_frame_group(grp->render);
 
-	if (render) {
+	if (render && add_task_to_frame_group(grp, render)) {
 		grp->render = render;
 		grp->render_pid = tid;
-		add_task_to_frame_group(grp, render);
 	}
 	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(&sf_fbg_lock, flags);
+	if (task_removed) {
+		put_task_struct(task_removed);
+	}
 }
 EXPORT_SYMBOL_GPL(set_renderengine_thread);
 
@@ -697,6 +754,7 @@ bool add_rm_related_frame_task(int grp_id, int pid, int tid, int add, int r_dept
 {
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
+	struct task_struct *task_removed = NULL;
 	struct task_struct *tsk = NULL;
 	struct frame_group *grp = NULL;
 	bool success = false;
@@ -711,7 +769,7 @@ bool add_rm_related_frame_task(int grp_id, int pid, int tid, int add, int r_dept
 	if (add && is_same_uid(tsk, grp->ui)) {
 		add_task_to_frame_group(grp, tsk);
 	} else if (!add) {
-		remove_task_from_frame_group(tsk);
+		task_removed = remove_task_from_frame_group(tsk);
 	}
 	raw_spin_unlock_irqrestore(lock, flags);
 
@@ -722,6 +780,9 @@ bool add_rm_related_frame_task(int grp_id, int pid, int tid, int add, int r_dept
 	success = true;
 out:
 	rcu_read_unlock();
+	if (task_removed) {
+		put_task_struct(task_removed);
+	}
 	return success;
 }
 EXPORT_SYMBOL_GPL(add_rm_related_frame_task);
@@ -729,6 +790,7 @@ EXPORT_SYMBOL_GPL(add_rm_related_frame_task);
 bool add_task_to_game_frame_group(int tid, int add)
 {
 	unsigned long flags;
+	struct task_struct *task_removed = NULL;
 	struct task_struct *tsk = NULL;
 	struct frame_group *grp = NULL;
 	struct oplus_task_struct *ots = NULL;
@@ -761,13 +823,16 @@ bool add_task_to_game_frame_group(int tid, int add)
 	if (add) {
 		add_task_to_frame_group(grp, tsk);
 	} else if (!add) {
-		remove_task_from_frame_group(tsk);
+		task_removed = remove_task_from_frame_group(tsk);
 	}
 	raw_spin_unlock_irqrestore(&game_fbg_lock, flags);
 
 	success = true;
 out:
 	rcu_read_unlock();
+	if (task_removed) {
+		put_task_struct(task_removed);
+	}
 	return success;
 }
 EXPORT_SYMBOL_GPL(add_task_to_game_frame_group);
@@ -775,13 +840,13 @@ EXPORT_SYMBOL_GPL(add_task_to_game_frame_group);
 /**********************************************************
  * add/remove dynamic binder frame task to/from frame group
  **********************************************************/
-static void remove_binder_from_frame_group(struct task_struct *binder)
+static struct task_struct* remove_binder_from_frame_group(struct task_struct *binder)
 {
 	struct oplus_task_struct *ots_binder = get_oplus_task_struct(binder);
 	struct frame_group *grp = NULL;
 
 	if (IS_ERR_OR_NULL(ots_binder) || !(ots_binder->fbg_state & BINDER_FRAME_TASK))
-		return;
+		return NULL;
 
 	grp = task_get_frame_group(ots_binder);
 	frame_grp_with_lock_assert(grp);
@@ -791,7 +856,7 @@ static void remove_binder_from_frame_group(struct task_struct *binder)
 	/* judge two times for hot path performance */
 	if (!(ots_binder->fbg_state & BINDER_FRAME_TASK)) {
 		raw_spin_unlock(&ots_binder->fbg_list_entry_lock);
-		return;
+		return NULL;
 	}
 
 	list_del_init(&ots_binder->fbg_list);
@@ -806,7 +871,9 @@ static void remove_binder_from_frame_group(struct task_struct *binder)
 		ofb_err("group binder num is less than 0, binder_num=%d, group_id=%d, prio=%d",
 			grp->binder_thread_num, get_frame_group_id(grp), binder->prio);
 
-	put_task_struct(binder);
+	/*BUG: 7976822*/
+	/*put_task_struct(binder);*/
+	return binder;
 }
 
 static void add_binder_to_frame_group(struct task_struct *binder, struct task_struct *from)
@@ -826,7 +893,7 @@ static void add_binder_to_frame_group(struct task_struct *binder, struct task_st
 		return;
 
 	/* game_frame_boost_group and inputmethod_frame_boost_group not add binder task */
-	if (ots_from->fbg_state & (FRAME_GAME | FRAME_INPUTMETHOD))
+	if (ots_from->fbg_state & (FRAME_GAME | FRAME_INPUTMETHOD | FRAME_PENDING))
 		return;
 
 	if (ots_from->fbg_state & FRAME_COMPOSITION) {
@@ -914,6 +981,7 @@ static void fbg_binder_wakeup_hook(void *unused, struct task_struct *caller_task
 static void fbg_binder_restore_priority_hook(void *unused, struct binder_transaction *t,
 	struct task_struct *task)
 {
+	struct task_struct *task_removed = NULL;
 	struct oplus_task_struct *ots = get_oplus_task_struct(task);
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
@@ -925,8 +993,11 @@ static void fbg_binder_restore_priority_hook(void *unused, struct binder_transac
 
 	if (task != NULL) {
 		raw_spin_lock_irqsave(lock, flags);
-		remove_binder_from_frame_group(task);
+		task_removed = remove_binder_from_frame_group(task);
 		raw_spin_unlock_irqrestore(lock, flags);
+	}
+	if (task_removed) {
+		put_task_struct(task_removed);
 	}
 }
 
@@ -940,6 +1011,7 @@ static void fbg_binder_restore_priority_hook(void *unused, struct binder_transac
 static void fbg_binder_wait_for_work_hook(void *unused, bool do_proc_work,
 	struct binder_thread *tsk, struct binder_proc *proc)
 {
+	struct task_struct *task_removed = NULL;
 	struct oplus_task_struct *ots = get_oplus_task_struct(tsk->task);
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
@@ -951,8 +1023,12 @@ static void fbg_binder_wait_for_work_hook(void *unused, bool do_proc_work,
 		lock = task_get_frame_group_lock(ots);
 
 		raw_spin_lock_irqsave(lock, flags);
-		remove_binder_from_frame_group(tsk->task);
+		task_removed = remove_binder_from_frame_group(tsk->task);
 		raw_spin_unlock_irqrestore(lock, flags);
+	}
+
+	if (task_removed) {
+		put_task_struct(task_removed);
 	}
 }
 
@@ -1452,6 +1528,11 @@ static bool valid_freq_querys(const struct cpumask *query_cpus, struct frame_gro
 		rq = cpu_rq(cpu);
 		if (task_running(rq, p))
 			cpumask_set_cpu(task_cpu(p), &on_cpus);
+
+		if (count > 900) {
+			pr_info("DEBUG[%d]: p=%s, pid=%d, prio=%d, fbg_state=%d, cpu=%d\n",
+				__LINE__, p->comm, p->pid, p->prio, ots->fbg_state, cpu);
+		}
 
 		/* detect infinite loop */
 		BUG_ON(++count > 1000);
@@ -2418,7 +2499,7 @@ bool fbg_need_up_migration(struct task_struct *p, struct rq *rq)
 		return false;
 
 	ots = get_oplus_task_struct(p);
-	if (IS_ERR_OR_NULL(ots) || !ots->fbg_state || ots->fbg_state & (FRAME_COMPOSITION | FRAME_GAME | FRAME_INPUTMETHOD))
+	if (IS_ERR_OR_NULL(ots) || !ots->fbg_state || ots->fbg_state & (FRAME_COMPOSITION | FRAME_GAME | FRAME_INPUTMETHOD | FRAME_PENDING))
 		return false;
 
 	grp = &default_frame_boost_group;
@@ -2455,7 +2536,7 @@ bool fbg_skip_migration(struct task_struct *tsk, int src_cpu, int dst_cpu)
 		return false;
 
 	ots = get_oplus_task_struct(tsk);
-	if (IS_ERR_OR_NULL(ots) || !ots->fbg_state || ots->fbg_state & (FRAME_COMPOSITION | FRAME_GAME | FRAME_INPUTMETHOD))
+	if (IS_ERR_OR_NULL(ots) || !ots->fbg_state || ots->fbg_state & (FRAME_COMPOSITION | FRAME_GAME | FRAME_INPUTMETHOD | FRAME_PENDING))
 		return false;
 
 	dst_ots = get_oplus_task_struct(dst_rq->curr);
@@ -2547,6 +2628,8 @@ EXPORT_SYMBOL_GPL(fbg_skip_rt_sync);
  *********************************/
 static void fbg_flush_task_hook(void *unused, struct task_struct *tsk)
 {
+	struct task_struct *task_removed;
+	struct task_struct *binder_removed;
 	struct oplus_task_struct *ots = get_oplus_task_struct(tsk);
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
@@ -2558,9 +2641,15 @@ static void fbg_flush_task_hook(void *unused, struct task_struct *tsk)
 
 	raw_spin_lock_irqsave(lock, flags);
 	/* game group task also removed here */
-	remove_task_from_frame_group(tsk);
-	remove_binder_from_frame_group(tsk);
+	task_removed = remove_task_from_frame_group(tsk);
+	binder_removed = remove_binder_from_frame_group(tsk);
 	raw_spin_unlock_irqrestore(lock, flags);
+	if (task_removed) {
+		put_task_struct(task_removed);
+	}
+	if (binder_removed) {
+		put_task_struct(binder_removed);
+	}
 }
 
 static void fbg_sched_fork_hook(void *unused, struct task_struct *tsk)
@@ -2703,7 +2792,7 @@ bool fbg_is_ed_task(struct task_struct *tsk, u64 wall_clock)
 		return false;
 
 	ots = get_oplus_task_struct(tsk);
-	if (IS_ERR_OR_NULL(ots) || !ots->fbg_state || ots->fbg_state & (FRAME_COMPOSITION | FRAME_GAME | FRAME_INPUTMETHOD))
+	if (IS_ERR_OR_NULL(ots) || !ots->fbg_state || ots->fbg_state & (FRAME_COMPOSITION | FRAME_GAME | FRAME_INPUTMETHOD | FRAME_PENDING))
 		return false;
 
 	if (ots->last_wake_ts && wall_clock > ots->last_wake_ts)
