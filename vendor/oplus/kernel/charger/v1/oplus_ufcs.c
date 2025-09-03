@@ -542,8 +542,8 @@ static int oplus_ufcs_boot_delay(void)
 {
 	struct oplus_ufcs_chip *chip = g_ufcs_chip;
 
-	if (!chip || !chip->ufcs_support_type || !chip->ufcs_boot_delay_ms || oplus_chg_get_boot_completed() ||
-	    oplus_is_power_off_charging(NULL))
+	if (!chip || !chip->ufcs_support_type || !chip->ufcs_boot_delay_ms ||
+	    oplus_chg_get_boot_completed())
 		return 0;
 
 	ufcs_err("ufcs boot delay ms:%d\n", chip->ufcs_boot_delay_ms);
