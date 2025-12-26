@@ -463,6 +463,7 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 	if (!strcmp(panel->name, "AC052 P 3 A0003 dsc cmd mode panel")
 		|| !strcmp(panel->name, "AC052 S 3 A0001 dsc cmd mode panel")
 		|| !strcmp(panel->name, "AA536 P 3 A0001 dsc cmd mode panel")
+		|| !strcmp(panel->name, "AA545 P 3 A0005 dsc cmd mode panel")
 		|| !strcmp(panel->oplus_priv.vendor_name, "A0004")
 		|| !strcmp(panel->oplus_priv.vendor_name, "A0012")) {
 		rc = 0;
@@ -2269,6 +2270,10 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-demura-dbv-mode-1-command",
 	"qcom,mdss-dsi-demura-dbv-mode-2-command",
 	"qcom,mdss-dsi-demura-dbv-mode-3-command",
+	"qcom,mdss-dsi-demura-dbv-mode-4-command",
+	"qcom,mdss-dsi-demura-dbv-mode-5-command",
+	"qcom,mdss-dsi-demura-dbv-mode-6-command",
+	"qcom,mdss-dsi-demura-dbv-mode-7-command",
 	"qcom,mdss-dsi-dly-on-command",
 	"qcom,mdss-dsi-dly-off-command",
 	"qcom,mdss-dsi-cabc-off-command",
@@ -2501,6 +2506,10 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-demura-dbv-mode-1-command-state",
 	"qcom,mdss-dsi-demura-dbv-mode-2-command-state",
 	"qcom,mdss-dsi-demura-dbv-mode-3-command-state",
+	"qcom,mdss-dsi-demura-dbv-mode-4-command-state",
+	"qcom,mdss-dsi-demura-dbv-mode-5-command-state",
+	"qcom,mdss-dsi-demura-dbv-mode-6-command-state",
+	"qcom,mdss-dsi-demura-dbv-mode-7-command-state",
 	"qcom,mdss-dsi-dly-on-command-state",
 	"qcom,mdss-dsi-dly-off-command-state",
 	"qcom,mdss-dsi-cabc-off-command-state",
@@ -5179,7 +5188,9 @@ int dsi_panel_update_pps(struct dsi_panel *panel)
 #if defined(CONFIG_PXLW_IRIS)
 	iris_dsi_panel_dump_pps(set);
 #endif
-
+	if (!strcmp(panel->name, "AA545 P 3 A0005 dsc cmd mode panel")) {
+		oplus_panel_switch_to_sync_te(panel, true);
+	}
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PPS);
 	if (rc) {
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_PPS cmds, rc=%d\n",
@@ -5329,6 +5340,7 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 	if (!strcmp(panel->name, "AC052 P 3 A0003 dsc cmd mode panel")
 		|| !strcmp(panel->name, "AC052 S 3 A0001 dsc cmd mode panel")
 		|| !strcmp(panel->name, "AA536 P 3 A0001 dsc cmd mode panel")
+		|| !strcmp(panel->name, "AA545 P 3 A0005 dsc cmd mode panel")
 		|| !strcmp(panel->oplus_priv.vendor_name, "A0004")
 		|| !strcmp(panel->oplus_priv.vendor_name, "A0012")) {
 		usleep_range(10*1000, (10*1000)+100);
@@ -5634,7 +5646,9 @@ int dsi_panel_switch(struct dsi_panel *panel)
 
 #ifdef OPLUS_FEATURE_DISPLAY
 	if (!strcmp(panel->name, "AA551 P 3 A0004 dsc cmd mode panel")) {
-		oplus_panel_switch_to_sync_te(panel);
+		oplus_panel_switch_to_sync_te(panel, false);
+	} else if (!strcmp(panel->name, "AA545 P 3 A0005 dsc cmd mode panel")) {
+		oplus_panel_switch_to_sync_te(panel, true);
 	} else if (!strcmp(panel->name, "AC052 S 3 A0001 dsc cmd mode panel")) {
 		oplus_panel_switch_to_sync_cur_te(panel);
 	} else if (oplus_panel_pwm_onepulse_is_enabled(panel)) {
@@ -5661,6 +5675,7 @@ int dsi_panel_switch(struct dsi_panel *panel)
 		pr_info("IRIS_LOG: dsi_cmd %s\n", cmd_set_prop_map[TIMING_SWITCH_TYPE_ID]);
 	} else
 #endif
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_TIMING_SWITCH);
 	if (rc)
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_TIMING_SWITCH cmds, rc=%d\n",

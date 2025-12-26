@@ -237,6 +237,13 @@
 
 	oplus_chg_comm: oplus,comm {
 		compatible = "oplus,common-charge";
+		oplus_spec,dec-vol-cc-thr = <0 400 800>;
+		oplus_spec,dec-vol-fv-mv = <0  0  0  0  0  0  0  0  0
+					    20 20 20 20 20 20 20 0  0
+					    40 40 40 40 40 40 20 0  0>;
+		oplus_spec,dec-vol-wired-ffc-mv = <0  0  0
+						   20 20 20
+						   40 40 20>;
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 450 530>;
 		oplus_spec,iterm-ma = <144>;
 		oplus_spec,fv-mv = <4470 4470 4470 4470 4470 4470 4130 4130>;
@@ -340,6 +347,8 @@
 						410 430 CURR_LIMIT_7BIT_4_0A 4 2
 						420 440 CURR_LIMIT_7BIT_3_0A 4 3 >;
 
+		oplus,plc_strategy-data = <&buck_simple_strategy &svooc_simple_strategy &vooc_simple_strategy>;
+		oplus,plc_strategy-names = "default", "svooc", "vooc";
 
 		oplus_virtual_vphy: oplus,virtual_vphy {
 			compatible = "oplus,virtual_vphy";
@@ -374,6 +383,9 @@
 		oplus,gauge_ic = <&oplus_virtual_gauge>;
 		oplus,topic-update-interval = <5000>;
 		oplus,support_subboard_ntc;
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <0>;
 
 		deep_spec,support;
 		deep_spec,uv_thr = <3000>;
@@ -1510,6 +1522,9 @@
 		oplus,ufcs_charge_strategy_temp = <0 50 120 200 350 440 530>;
 		oplus,ufcs_low_curr_full_strategy_temp = <0 200 350 440>;
 
+		oplus,plc_strategy-data = <&oplus_ufcs_step_strategy &third_ufcs_simple_strategy>;
+		oplus,plc_strategy-names = "default", "third";
+
 		ufcs_charge_low_curr_full {
 			strategy_temp_little_cool =	<1850 4540 0
 							1750 4535 0
@@ -1872,5 +1887,44 @@
 		pinctrl-0 = <&ufcs_int_default>;
 		pinctrl-1 = <&ufcs_en_active>;
 		pinctrl-2 = <&ufcs_en_sleep>;
+	};
+};
+
+&soc {
+	oplus_chg_plc: oplus,plc_charge {
+		compatible = "oplus,plc_charge";
+		oplus,plc_support = <CHG_PROTOCOL_UFCS>;
+		oplus,plc_soc = <90>;
+		oplus,plc_strategy-data = <&buck_simple_strategy>;
+		oplus,plc_strategy-names = "default";
+
+		oplus_ufcs_step_strategy: oplus_ufcs_step_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_STEP>;
+		};
+
+		third_ufcs_simple_strategy: third_ufcs_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <1000 1500>;
+			};
+		};
+
+		svooc_simple_strategy: svooc_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <1000 1500>;
+			};
+		};
+
+		vooc_simple_strategy: vooc_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <2000 3000>;
+			};
+		};
+
+		buck_simple_strategy: buck_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+		};
 	};
 };

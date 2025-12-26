@@ -3342,13 +3342,13 @@ static int synaptics_enable_waterproof_mode(struct syna_tcm_hcd *tcm_hcd, bool e
 	TPD_DEBUG("%s:enable = %d\n", __func__, enable);
 
 	if (enable) {
-		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 1);
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 0);
 		if (ret < 0) {
 			TPD_INFO("%s:failed to enable waterproof mode\n", __func__);
 			return ret;
 		}
 	} else {
-		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 0);
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 1);
 		if (ret < 0) {
 			TPD_INFO("%s:failed to disable waterproof mode\n", __func__);
 			return ret;
@@ -5306,11 +5306,11 @@ void tp_wait_hdl_finished(void)
 
 	do {
 		if (retry_cnt) {
-			msleep(100);
+			msleep(10);
 		}
 		retry_cnt++;
 		TPD_INFO("Wait hdl finished retry %d times...  \n", retry_cnt);
-	} while (!g_tcm_hcd->hdl_finished_flag && retry_cnt < 20);
+	} while (!g_tcm_hcd->hdl_finished_flag && retry_cnt < 200);
 }
 
 /*
@@ -5573,12 +5573,6 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 		return retval;
 	}
 
-	retval = register_common_touch_device(ts);
-
-	if (retval < 0 && (retval != -EFTM)) {
-		TPD_INFO("Failed to init device information\n");
-		goto err_register_driver;
-	}
 	if(ts->firmware_in_dts != NULL) {
 		tcm_hcd->tcm_firmware_headfile = ts->firmware_in_dts;
 		TPD_INFO("tcm_firmware_headfile run\n");
@@ -5586,6 +5580,20 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 		tcm_hcd->p_firmware_headfile = &ts->panel_data.firmware_headfile;
 		TPD_INFO("p_firmware_headfile run\n");
 	}
+
+	init_completion(&tcm_hcd->config_complete);
+	tcm_hcd->init_okay = false;
+	g_tcm_hcd->hdl_finished_flag = 0;
+	tcm_hcd->init_okay = true;
+	syna_remote_zeroflash_init(tcm_hcd);
+
+	retval = register_common_touch_device(ts);
+
+	if (retval < 0 && (retval != -EFTM)) {
+		TPD_INFO("Failed to init device information\n");
+		goto err_register_driver;
+	}
+
 	tcm_hcd->health_monitor_support = ts->health_monitor_support;
 	if (tcm_hcd->health_monitor_support) {
 		tcm_hcd->monitor_data = &ts->monitor_data;
@@ -5602,7 +5610,6 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 	}
 
 	synaptics_create_proc(ts, tcm_hcd->syna_ops);
-	init_completion(&tcm_hcd->config_complete);
 
 	device_hcd = syna_remote_device_init(tcm_hcd);
 	if (device_hcd) {
@@ -5612,11 +5619,6 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 		device_hcd->reset = syna_tcm_reset;
 		device_hcd->report_touch = syna_device_report_touch;
 	}
-	tcm_hcd->init_okay = false;
-	g_tcm_hcd->hdl_finished_flag = 0;
-
-	tcm_hcd->init_okay = true;
-	syna_remote_zeroflash_init(tcm_hcd);
 /*#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
     if (ts->boot_mode == RECOVERY_BOOT)
 #else

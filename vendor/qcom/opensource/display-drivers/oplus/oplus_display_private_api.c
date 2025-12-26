@@ -688,6 +688,19 @@ static ssize_t oplus_display_regulator_control(struct kobject *obj,
 	return count;
 }
 
+static ssize_t oplus_display_get_main_panel_name(struct kobject *obj,
+		struct kobj_attribute *attr, char *buf)
+{
+	struct dsi_display *display = get_main_display();
+	if (!display || !display->panel || !display->panel->name) {
+		LCD_ERR("failed to config lcd panel name\n");
+		return -EINVAL;
+	}
+
+	LCD_INFO("panel name:%s\n", (char*)display->panel->name);
+	return sysfs_emit(buf, "panel_name:%s\n", (char*)display->panel->name);
+}
+
 static ssize_t oplus_display_get_panel_serial_number(struct kobject *obj,
 		struct kobj_attribute *attr, char *buf)
 {
@@ -3260,6 +3273,7 @@ static OPLUS_ATTR(ultra_low_power_aod_mode, S_IRUGO | S_IWUSR, oplus_ofp_get_ult
 static OPLUS_ATTR(LCM_CABC, S_IRUGO|S_IWUSR, oplus_display_get_panel_cabc, oplus_display_set_panel_cabc);
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 static OPLUS_ATTR(shutdownflag, S_IRUGO | S_IWUSR, oplus_get_shutdownflag, oplus_set_shutdownflag);
+static OPLUS_ATTR(main_panel_name, S_IRUGO | S_IWUSR, oplus_display_get_main_panel_name, NULL);
 
 /*
  * Create a group of attributes so that we can create and destroy them all
@@ -3325,6 +3339,7 @@ static struct attribute *oplus_display_attrs[] = {
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 	&oplus_attr_LCM_CABC.attr,
 	&oplus_attr_shutdownflag.attr,
+	&oplus_attr_main_panel_name.attr,
 	NULL,	/* need to NULL terminate the list of attributes */
 };
 

@@ -773,7 +773,8 @@ int oplus_panel_vddr_on(struct dsi_display *display, const char *vreg_name)
 	if ((!strcmp(display->panel->name, "AC052 P 3 A0003 dsc cmd mode panel")
 		|| !strcmp(display->panel->name, "AC052 P 1 A0002 dsc cmd mode panel")
 		|| !strcmp(display->panel->name, "AA536 P 3 A0001 dsc cmd mode panel")
-		|| !strcmp(display->panel->name, "AA551 P 3 A0004 dsc cmd mode panel"))
+		|| !strcmp(display->panel->name, "AA551 P 3 A0004 dsc cmd mode panel")
+		|| !strcmp(display->panel->name, "AA545 P 3 A0005 dsc cmd mode panel"))
 		&& !strcmp(vreg_name, "vddio")) {
 		if (gpio_is_valid(display->panel->reset_config.panel_vout_gpio)) {
 			rc = gpio_direction_output(display->panel->reset_config.panel_vout_gpio, 1);
@@ -798,7 +799,8 @@ int oplus_panel_vddr_off(struct dsi_display *display, const char *vreg_name)
 	if ((!strcmp(display->panel->name, "AC052 P 3 A0003 dsc cmd mode panel")
 		|| !strcmp(display->panel->name, "AC052 P 1 A0002 dsc cmd mode panel")
 		|| !strcmp(display->panel->name, "AA536 P 3 A0001 dsc cmd mode panel")
-		|| !strcmp(display->panel->name, "AA551 P 3 A0004 dsc cmd mode panel"))
+		|| !strcmp(display->panel->name, "AA551 P 3 A0004 dsc cmd mode panel")
+		|| !strcmp(display->panel->name, "AA545 P 3 A0005 dsc cmd mode panel"))
 		&& !strcmp(vreg_name, "vci")) {
 		usleep_range(2*1000, (2*1000)+100);
 		if (gpio_is_valid(display->panel->reset_config.panel_vout_gpio)) {
