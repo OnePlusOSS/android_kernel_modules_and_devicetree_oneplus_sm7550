@@ -170,6 +170,7 @@ static int kcompressd(void *para)
 			}
 		}
 
+		usleep_range(1000, 2000);
 	}
 
 	tsk->flags &= ~(PF_MEMALLOC | PF_KSWAPD);
@@ -209,20 +210,20 @@ static int kcompress_update(void)
 	int i;
 	int ret;
 
-	kcompress = kvmalloc_array(nr_kcompressd, sizeof(struct kcompress), GFP_KERNEL);
+	kcompress = kvcalloc(nr_kcompressd, sizeof(struct kcompress), GFP_KERNEL);
 	if (!kcompress)
 		return -ENOMEM;
 
-	kcompressd_para = kvmalloc_array(nr_kcompressd, sizeof(struct kcompressd_para), GFP_KERNEL);
+	kcompressd_para = kvcalloc(nr_kcompressd, sizeof(struct kcompressd_para), GFP_KERNEL);
 	if (!kcompressd_para) {
-		kfree(kcompress);
+		kvfree(kcompress);
 		return -ENOMEM;
 	}
 
 	ret = init_write_queue();
 	if (ret) {
-		kfree(kcompressd_para);
-		kfree(kcompress);
+		kvfree(kcompressd_para);
+		kvfree(kcompress);
 		pr_err("Initialization of writing to FIFOs failed!!\n");
 		return ret;
 	}
@@ -371,6 +372,7 @@ int kcompressd_init(void)
 {
 	int ret = 0;
 	struct proc_dir_entry *root_dir_entry;
+	int i;
 
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
 	struct config_kcompressed *config;
@@ -403,9 +405,20 @@ int kcompressd_init(void)
 		return ret;
 	}
 
+	for (i = 0; i < nr_kcompressd; i++) {
+		atomic_set(&kcompress[i].running, KCOMPRESSD_RUNNING);
+		kcompress[i].kcompressd = kthread_run(kcompressd,
+				&kcompressd_para[i], "kcompressd:%d", i);
+		if (IS_ERR(kcompress[i].kcompressd)) {
+			atomic_set(&kcompress[i].running, KCOMPRESSD_NOT_STARTED);
+			pr_err("Failed to start kcompressd:%d\n", i);
+			goto out;
+		}
+	}
+
 	pr_err("kcompressd_init succeed!\n");
 	atomic_set(&enable_kcompressd, true);
-
+out:
 	return ret;
 }
 
